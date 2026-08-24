@@ -1,9 +1,4 @@
-"""
-Genera el hash bcrypt de la contraseña del admin, para poner en ADMIN_PASSWORD_HASH en .env
 
-Uso:
-    uv run python generar_hash_admin.py
-"""
 
 import getpass
 
