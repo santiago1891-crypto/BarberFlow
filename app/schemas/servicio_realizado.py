@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class ServicioRealizadoBase(BaseModel):
-    barbero_id: uuid.UUID
+    barbero_id: int
     tipo_servicio_id: uuid.UUID
     turno_id: uuid.UUID | None = None  # None si fue walk-in (sin reserva)
     fecha_hora: datetime | None = None  # si no se manda, se usa now()
@@ -22,7 +22,7 @@ class ServicioRealizadoCreate(ServicioRealizadoBase):
 class ServicioRealizadoUpdate(BaseModel):
     """No permite tocar comision_monto: es columna generada por la base de datos."""
 
-    barbero_id: uuid.UUID | None = None
+    barbero_id: int | None = None
     tipo_servicio_id: uuid.UUID | None = None
     turno_id: uuid.UUID | None = None
     precio_cobrado: Decimal | None = Field(None, ge=0)

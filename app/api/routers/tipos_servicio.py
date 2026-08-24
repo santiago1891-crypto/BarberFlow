@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import crud
@@ -11,8 +11,13 @@ router = APIRouter(prefix="/tipos-servicio", tags=["Tipos de servicio"])
 
 
 @router.get("/", response_model=list[TipoServicioRead])
-async def listar_tipos_servicio(skip: int = 0, limit: int = 100, db: AsyncSession = Depends(get_db)):
-    return await crud.tipo_servicio.get_multi(db, skip=skip, limit=limit)
+async def listar_tipos_servicio(
+    skip: int = 0,
+    limit: int = 100,
+    activo: bool | None = Query(None, description="Filtrar por tipos de servicio activos/inactivos"),
+    db: AsyncSession = Depends(get_db),
+):
+    return await crud.tipo_servicio.get_multi_filtered(db, skip=skip, limit=limit, activo=activo)
 
 
 @router.post("/", response_model=TipoServicioRead, status_code=status.HTTP_201_CREATED)

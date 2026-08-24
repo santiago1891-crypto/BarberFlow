@@ -7,6 +7,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.base import Base
 
+
+class ReglaDeNegocioError(Exception):
+    """Se lanza cuando una operación viola una regla de negocio (no un error de datos).
+
+    Los routers la capturan y la traducen a un HTTP 409 Conflict.
+    """
+
+
 ModelType = TypeVar("ModelType", bound=Base)
 CreateSchemaType = TypeVar("CreateSchemaType", bound=BaseModel)
 UpdateSchemaType = TypeVar("UpdateSchemaType", bound=BaseModel)

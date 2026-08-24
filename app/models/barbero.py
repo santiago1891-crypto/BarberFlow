@@ -1,9 +1,7 @@
-import uuid
 from datetime import date, datetime
 from decimal import Decimal
 
-from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, Numeric, String, func, text
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, Identity, Integer, Numeric, String, func, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -18,9 +16,8 @@ class Barbero(Base):
         ),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
-    )
+    # Entero autoincremental (IDENTITY), más simple de manejar a mano que un UUID.
+    id: Mapped[int] = mapped_column(Integer, Identity(always=True), primary_key=True)
     nombre: Mapped[str] = mapped_column(String(100), nullable=False)
     apellido: Mapped[str] = mapped_column(String(100), nullable=False)
     telefono: Mapped[str | None] = mapped_column(String(20))
@@ -43,4 +40,4 @@ class Barbero(Base):
     servicios_realizados: Mapped[list["ServicioRealizado"]] = relationship(back_populates="barbero")
 
     def __repr__(self) -> str:
-        return f"<Barbero {self.nombre} {self.apellido}>"
+        return f"<Barbero {self.id}: {self.nombre} {self.apellido}>"

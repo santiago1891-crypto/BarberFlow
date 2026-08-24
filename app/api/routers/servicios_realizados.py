@@ -1,6 +1,7 @@
 import uuid
+from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import crud
@@ -15,8 +16,24 @@ router = APIRouter(prefix="/servicios-realizados", tags=["Servicios realizados"]
 
 
 @router.get("/", response_model=list[ServicioRealizadoRead])
-async def listar_servicios_realizados(skip: int = 0, limit: int = 100, db: AsyncSession = Depends(get_db)):
-    return await crud.servicio_realizado.get_multi(db, skip=skip, limit=limit)
+async def listar_servicios_realizados(
+    skip: int = 0,
+    limit: int = 100,
+    barbero_id: int | None = Query(None, description="Filtrar por barbero"),
+    tipo_servicio_id: uuid.UUID | None = Query(None, description="Filtrar por tipo de servicio"),
+    fecha_desde: datetime | None = Query(None, description="Servicios desde esta fecha/hora (inclusive)"),
+    fecha_hasta: datetime | None = Query(None, description="Servicios hasta esta fecha/hora (inclusive)"),
+    db: AsyncSession = Depends(get_db),
+):
+    return await crud.servicio_realizado.get_multi_filtered(
+        db,
+        skip=skip,
+        limit=limit,
+        barbero_id=barbero_id,
+        tipo_servicio_id=tipo_servicio_id,
+        fecha_desde=fecha_desde,
+        fecha_hasta=fecha_hasta,
+    )
 
 
 @router.post("/", response_model=ServicioRealizadoRead, status_code=status.HTTP_201_CREATED)

@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import CheckConstraint, Computed, DateTime, ForeignKey, Numeric, Text, func, text
+from sqlalchemy import CheckConstraint, Computed, DateTime, ForeignKey, Integer, Numeric, Text, func, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -20,9 +20,7 @@ class ServicioRealizado(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
     )
-    barbero_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("barberos.id"), nullable=False
-    )
+    barbero_id: Mapped[int] = mapped_column(Integer, ForeignKey("barberos.id"), nullable=False)
     tipo_servicio_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("tipos_servicio.id"), nullable=False
     )

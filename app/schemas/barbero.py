@@ -1,4 +1,3 @@
-import uuid
 from datetime import date, datetime
 from decimal import Decimal
 
@@ -34,7 +33,7 @@ class BarberoUpdate(BaseModel):
 class BarberoRead(BarberoBase):
     model_config = ConfigDict(from_attributes=True)
 
-    id: uuid.UUID
+    id: int
     fecha_ingreso: date
     created_at: datetime
     updated_at: datetime

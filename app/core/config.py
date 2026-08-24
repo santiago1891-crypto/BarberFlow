@@ -16,6 +16,13 @@ class Settings(BaseSettings):
     app_env: str = "development"
     debug: bool = False
 
+    # --- Autenticación (admin único) ---
+    admin_username: str
+    admin_password_hash: str
+    secret_key: str
+    algorithm: str = "HS256"
+    access_token_expire_minutes: int = 120
+
 
 @lru_cache
 def get_settings() -> Settings:
