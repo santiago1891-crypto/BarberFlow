@@ -1,28 +1,11 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db
 from app.crud import reportes as crud_reportes
-from app.schemas.reportes import (
-    AgendaHoyItem,
-    ComisionesMesActualItem,
-    GananciaBarberiaHoyResumen,
-    GananciaBarberoHoyItem,
-)
+from app.schemas.reportes import CierreCajaResumen, GananciaBarberiaHoyResumen, GananciaBarberoHoyItem
 
 router = APIRouter(prefix="/reportes", tags=["Reportes"])
-
-
-@router.get("/agenda-hoy", response_model=list[AgendaHoyItem])
-async def agenda_hoy(db: AsyncSession = Depends(get_db)):
-    """Turnos del día de hoy, ordenados por hora (vista v_agenda_hoy)."""
-    return await crud_reportes.get_agenda_hoy(db)
-
-
-@router.get("/comisiones-mes-actual", response_model=list[ComisionesMesActualItem])
-async def comisiones_mes_actual(db: AsyncSession = Depends(get_db)):
-    """Comisiones e ingresos por barbero activo en el mes en curso (vista v_comisiones_mes_actual)."""
-    return await crud_reportes.get_comisiones_mes_actual(db)
 
 
 @router.get("/ganancias-barberos-hoy", response_model=list[GananciaBarberoHoyItem])
@@ -35,3 +18,25 @@ async def ganancias_barberos_hoy(db: AsyncSession = Depends(get_db)):
 async def ganancia_barberia_hoy(db: AsyncSession = Depends(get_db)):
     """Cuánto se queda la barbería HOY: total facturado menos comisiones pagadas a barberos."""
     return await crud_reportes.get_ganancia_barberia_hoy(db)
+
+
+@router.post("/cerrar-caja-hoy", response_model=CierreCajaResumen)
+async def cerrar_caja_hoy(
+    confirmar: bool = Query(
+        False,
+        description=(
+            "False (default): solo muestra el resumen, no borra nada. "
+            "True: borra los servicios_realizados y pagos de hoy. Es IRREVERSIBLE."
+        ),
+    ),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Cierre de caja del día.
+
+    Recomendado: llamar primero SIN confirmar (o con confirmar=false) para
+    revisar cuánto ganó cada barbero y cuánto se queda la barbería. Una vez
+    verificados los números, llamar de nuevo con confirmar=true para borrar
+    los registros del día y dejar la caja en cero para mañana.
+    """
+    return await crud_reportes.cerrar_caja_hoy(db, confirmar=confirmar)

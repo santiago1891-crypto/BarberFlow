@@ -1,28 +1,16 @@
 from datetime import date
 
-from sqlalchemy import Date, cast, func, select, text
+from sqlalchemy import Date, cast, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.barbero import Barbero
+from app.models.pago import Pago
 from app.models.servicio_realizado import ServicioRealizado
 from app.schemas.reportes import (
-    AgendaHoyItem,
-    ComisionesMesActualItem,
+    CierreCajaResumen,
     GananciaBarberiaHoyResumen,
     GananciaBarberoHoyItem,
 )
-
-
-async def get_agenda_hoy(db: AsyncSession) -> list[AgendaHoyItem]:
-    """Lee directamente la vista public.v_agenda_hoy (ya ordenada por fecha_hora)."""
-    result = await db.execute(text("SELECT * FROM public.v_agenda_hoy"))
-    return [AgendaHoyItem.model_validate(row) for row in result.mappings().all()]
-
-
-async def get_comisiones_mes_actual(db: AsyncSession) -> list[ComisionesMesActualItem]:
-    """Lee directamente la vista public.v_comisiones_mes_actual."""
-    result = await db.execute(text("SELECT * FROM public.v_comisiones_mes_actual"))
-    return [ComisionesMesActualItem.model_validate(row) for row in result.mappings().all()]
 
 
 def _es_hoy():
@@ -75,4 +63,49 @@ async def get_ganancia_barberia_hoy(db: AsyncSession) -> GananciaBarberiaHoyResu
         total_facturado=total_facturado,
         total_comisiones_pagadas=total_comisiones_pagadas,
         ganancia_barberia=total_facturado - total_comisiones_pagadas,
+    )
+
+
+async def cerrar_caja_hoy(db: AsyncSession, *, confirmar: bool) -> CierreCajaResumen:
+    """
+    Cierre de caja del día.
+
+    Siempre calcula y devuelve el resumen (ganancia por barbero + ganancia
+    de la barbería). Si confirmar=True, además BORRA los servicios_realizados
+    de hoy (y sus pagos asociados, por la foreign key), dejando la caja en
+    cero para el día siguiente. Es irreversible: se recomienda llamar primero
+    con confirmar=False para revisar los números.
+    """
+    ganancias_por_barbero = await get_ganancias_barberos_hoy(db)
+    resumen_barberia = await get_ganancia_barberia_hoy(db)
+
+    servicios_eliminados = 0
+    pagos_eliminados = 0
+
+    if confirmar:
+        # IDs de los servicios realizados hoy (los que se van a borrar)
+        stmt_ids = select(ServicioRealizado.id).where(_es_hoy())
+        result_ids = await db.execute(stmt_ids)
+        ids_hoy = [row[0] for row in result_ids.all()]
+
+        if ids_hoy:
+            # 1. Borrar primero los pagos asociados (FK: pagos.servicio_realizado_id)
+            result_pagos = await db.execute(delete(Pago).where(Pago.servicio_realizado_id.in_(ids_hoy)))
+            pagos_eliminados = result_pagos.rowcount or 0
+
+            # 2. Ahora sí, borrar los servicios realizados de hoy
+            result_servicios = await db.execute(
+                delete(ServicioRealizado).where(ServicioRealizado.id.in_(ids_hoy))
+            )
+            servicios_eliminados = result_servicios.rowcount or 0
+
+            await db.commit()
+
+    return CierreCajaResumen(
+        fecha=date.today(),
+        confirmado=confirmar,
+        ganancias_por_barbero=ganancias_por_barbero,
+        resumen_barberia=resumen_barberia,
+        servicios_eliminados=servicios_eliminados,
+        pagos_eliminados=pagos_eliminados,
     )
