@@ -1,0 +1,36 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: "Hanken Grotesk", sans-serif;
+  background-color: #121212;
+}
+
+.bf-input:focus {
+  outline: none;
+  border-color: #d4af37 !important;
+  box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.12);
+}
+
+.bf-input::placeholder {
+  color: #5c564c;
+}
+
+.bf-shimmer-line {
+  background-image: linear-gradient(
+    90deg,
+    transparent,
+    rgba(212, 175, 55, 0.55),
+    transparent
+  );
+  background-size: 120px 100%;
+  background-repeat: no-repeat;
+}
