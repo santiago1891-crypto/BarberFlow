@@ -3,7 +3,9 @@
 // Password Flow: form-urlencoded con "username" y "password", que devuelve
 // un JWT.
 
-import { API_URL, setToken, getToken } from "./api.js";
+import { API_URL, setToken, getToken, onUnauthorized } from "./api.js";
+
+export { onUnauthorized };
 
 /**
  * Inicia sesión contra POST /auth/login.
