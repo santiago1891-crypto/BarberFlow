@@ -23,8 +23,9 @@ const NAV_ITEMS = [
 export default function Sidebar({
   active,
   onNavigate,
+  onRegistrarServicio,
   onNuevaCita,
-  onNuevoServicio,
+  onNuevoServicioCatalogo,
   username,
   variant = "desktop",
   onClose,
@@ -82,20 +83,27 @@ export default function Sidebar({
         </ul>
       </nav>
 
-      <div className="px-3 pb-4 space-y-2">
+      <div className="px-3 pb-3 space-y-2">
+        <button
+          onClick={onRegistrarServicio}
+          className="w-full flex items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold bg-primary text-neutral hover:bg-primary-dark transition-colors"
+        >
+          <Plus size={16} strokeWidth={2.5} />
+          Registrar Servicio
+        </button>
         <button
           onClick={onNuevaCita}
-          className="w-full flex items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold bg-primary text-neutral hover:bg-primary-dark transition-colors"
+          className="w-full flex items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold bg-transparent border border-primary/40 text-primary hover:bg-primary-soft transition-colors"
         >
           <Plus size={16} strokeWidth={2.5} />
           Nueva Cita
         </button>
         <button
-          onClick={onNuevoServicio}
-          className="w-full flex items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold bg-transparent border border-primary/40 text-primary hover:bg-primary-soft transition-colors"
+          onClick={onNuevoServicioCatalogo}
+          className="w-full flex items-center justify-center gap-1.5 py-1 text-xs text-[#6b6459] hover:text-[#9C9488] transition-colors"
         >
-          <Plus size={16} strokeWidth={2.5} />
-          Nuevo Servicio
+          <Plus size={12} />
+          Añadir servicio al catálogo
         </button>
       </div>
 

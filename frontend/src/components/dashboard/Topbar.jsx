@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Search, Bell, LogOut, Menu, ChevronDown } from "lucide-react";
+import { Search, Bell, LogOut, Menu, ChevronDown, Lock } from "lucide-react";
 import { initials } from "../../lib/format.js";
 
 export default function Topbar({
@@ -9,6 +9,7 @@ export default function Topbar({
   username,
   onLogout,
   onOpenMobileNav,
+  onOpenCerrarCaja,
   pageTitle,
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -51,6 +52,14 @@ export default function Topbar({
       </div>
 
       <div className="flex items-center gap-1.5 shrink-0" ref={menuRef}>
+        <button
+          onClick={onOpenCerrarCaja}
+          className="hidden sm:flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold bg-primary text-neutral hover:bg-primary-dark transition-colors mr-1"
+        >
+          <Lock size={13} />
+          Cerrar Caja
+        </button>
+
         <div className="relative">
           <button
             onClick={() => setBellOpen((v) => !v)}
@@ -89,7 +98,17 @@ export default function Topbar({
         </button>
 
         {menuOpen && (
-          <div className="absolute right-0 top-14 mt-1 w-44 rounded-xl bg-card border border-primary/[0.16] shadow-[0_20px_40px_-15px_rgba(0,0,0,0.7)] p-1.5 animate-bf-pop">
+          <div className="absolute right-0 top-14 mt-1 w-48 rounded-xl bg-card border border-primary/[0.16] shadow-[0_20px_40px_-15px_rgba(0,0,0,0.7)] p-1.5 animate-bf-pop">
+            <button
+              onClick={() => {
+                setMenuOpen(false);
+                onOpenCerrarCaja();
+              }}
+              className="sm:hidden w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-primary hover:bg-primary-soft transition-colors"
+            >
+              <Lock size={15} />
+              Cerrar caja
+            </button>
             <button
               onClick={onLogout}
               className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-danger hover:bg-danger-soft transition-colors"

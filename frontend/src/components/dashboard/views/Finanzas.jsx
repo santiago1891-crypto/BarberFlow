@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { DollarSign, TrendingUp, Wallet, RefreshCcw } from "lucide-react";
 import { reportesApi, pagosApi } from "../../../lib/resources.js";
-import { formatMoney, formatDateTime } from "../../../lib/format.js";
+import { formatMoney, formatDateTime, METODO_PAGO_LABEL } from "../../../lib/format.js";
 import { toast } from "../../../lib/toast.js";
 import StatCard from "../../ui/StatCard.jsx";
 import Badge from "../../ui/Badge.jsx";
@@ -14,13 +14,7 @@ const ESTADO_META = {
   reembolsado: { label: "Reembolsado", variant: "danger" },
 };
 
-const METODO_LABEL = {
-  efectivo: "Efectivo",
-  tarjeta_debito: "Tarjeta de débito",
-  tarjeta_credito: "Tarjeta de crédito",
-  transferencia: "Transferencia",
-  mercado_pago: "Mercado Pago",
-};
+const METODO_LABEL = METODO_PAGO_LABEL;
 
 export default function Finanzas({ search }) {
   const [resumen, setResumen] = useState(null);

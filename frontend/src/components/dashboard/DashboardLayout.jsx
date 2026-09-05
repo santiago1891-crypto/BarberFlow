@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Construction } from "lucide-react";
 import Sidebar from "./Sidebar.jsx";
 import Topbar from "./Topbar.jsx";
+import CerrarCajaModal from "./CerrarCajaModal.jsx";
 import PanelControl from "./views/PanelControl.jsx";
 import Citas from "./views/Citas.jsx";
 import Servicios from "./views/Servicios.jsx";
@@ -34,9 +35,11 @@ export default function DashboardLayout({ username, onLogout }) {
   const [view, setView] = useState("panel");
   const [search, setSearch] = useState("");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [cerrarCajaOpen, setCerrarCajaOpen] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
   const citasRef = useRef(null);
   const serviciosRef = useRef(null);
+  const historialRef = useRef(null);
 
   useEffect(() => {
     let alive = true;
@@ -57,14 +60,21 @@ export default function DashboardLayout({ username, onLogout }) {
     setMobileNavOpen(false);
   }
 
+  // Acción principal: registrar un servicio ya realizado (walk-in), el
+  // corazón operativo del día a día de la barbería.
+  function handleRegistrarServicio() {
+    setView("historial");
+    setMobileNavOpen(false);
+    setTimeout(() => historialRef.current?.openCreate(), 60);
+  }
+
   function handleNuevaCita() {
     setView("citas");
     setMobileNavOpen(false);
-    // esperamos a que Citas esté montada para abrir el modal
     setTimeout(() => citasRef.current?.openCreate(), 60);
   }
 
-  function handleNuevoServicio() {
+  function handleNuevoServicioCatalogo() {
     setView("servicios");
     setMobileNavOpen(false);
     setTimeout(() => serviciosRef.current?.openCreate(), 60);
@@ -75,8 +85,9 @@ export default function DashboardLayout({ username, onLogout }) {
       <Sidebar
         active={view}
         onNavigate={navigate}
+        onRegistrarServicio={handleRegistrarServicio}
         onNuevaCita={handleNuevaCita}
-        onNuevoServicio={handleNuevoServicio}
+        onNuevoServicioCatalogo={handleNuevoServicioCatalogo}
         username={username}
       />
 
@@ -88,8 +99,9 @@ export default function DashboardLayout({ username, onLogout }) {
               variant="mobile"
               active={view}
               onNavigate={navigate}
+              onRegistrarServicio={handleRegistrarServicio}
               onNuevaCita={handleNuevaCita}
-              onNuevoServicio={handleNuevoServicio}
+              onNuevoServicioCatalogo={handleNuevoServicioCatalogo}
               username={username}
               onClose={() => setMobileNavOpen(false)}
             />
@@ -105,6 +117,7 @@ export default function DashboardLayout({ username, onLogout }) {
           username={username}
           onLogout={onLogout}
           onOpenMobileNav={() => setMobileNavOpen(true)}
+          onOpenCerrarCaja={() => setCerrarCajaOpen(true)}
           pageTitle={TITLES[view]}
         />
 
@@ -115,12 +128,14 @@ export default function DashboardLayout({ username, onLogout }) {
           {view === "citas" && <Citas ref={citasRef} search={search} />}
           {view === "servicios" && <Servicios ref={serviciosRef} search={search} />}
           {view === "personal" && <Personal search={search} />}
-          {view === "historial" && <HistorialVentas search={search} />}
+          {view === "historial" && <HistorialVentas ref={historialRef} search={search} />}
           {view === "finanzas" && <Finanzas search={search} />}
           {view === "configuracion" && <Proximamente label="Configuración" />}
           {view === "ayuda" && <Proximamente label="Ayuda" />}
         </main>
       </div>
+
+      <CerrarCajaModal open={cerrarCajaOpen} onClose={() => setCerrarCajaOpen(false)} />
     </div>
   );
 }

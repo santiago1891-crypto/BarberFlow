@@ -71,3 +71,23 @@ export function todayRangeISO() {
 export function initials(nombre = "", apellido = "") {
   return `${nombre.charAt(0)}${apellido.charAt(0)}`.toUpperCase() || "?";
 }
+
+export const METODO_PAGO_LABEL = {
+  efectivo: "Efectivo",
+  tarjeta_debito: "Tarjeta de débito",
+  tarjeta_credito: "Tarjeta de crédito",
+  transferencia: "Transferencia",
+  mercado_pago: "Mercado Pago",
+};
+
+/** true si la fecha (ISO) cae dentro del día de hoy, en horario local. */
+export function isToday(value) {
+  if (!value) return false;
+  const d = new Date(value);
+  const now = new Date();
+  return (
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate()
+  );
+}
