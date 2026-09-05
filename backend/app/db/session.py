@@ -19,4 +19,3 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """Dependencia de FastAPI: entrega una sesión y la cierra al terminar el request."""
     async with AsyncSessionLocal() as session:
         yield session
-

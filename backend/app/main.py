@@ -1,10 +1,11 @@
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.api.deps import get_current_admin
-from app.api.routers import turnos
+from app.api.routers import auth, barberos, pagos, reportes, servicios_realizados, tipos_servicio, turnos
 from app.core.config import settings
-from app.api.routers import auth, barberos, pagos, reportes, servicios_realizados, tipos_servicio
+from app.crud.base import ReglaDeNegocioError
 
 app = FastAPI(
     title="Barbería CRUD API",
@@ -23,6 +24,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+# Manejador global: cualquier router que deje pasar una ReglaDeNegocioError
+# (violación de regla de negocio o de integridad en la base) se traduce acá
+# a un 409 con un mensaje legible, en vez de un 500 genérico. Antes solo
+# turnos.py la capturaba a mano en cada endpoint; con esto queda cubierto
+# también barberos, tipos-servicio, pagos y servicios-realizados.
+@app.exception_handler(ReglaDeNegocioError)
+async def regla_de_negocio_handler(request, exc: ReglaDeNegocioError):
+    return JSONResponse(status_code=409, content={"detail": str(exc)})
+
+
 # Login: abierto, sin JWT (es donde se obtiene el JWT)
 app.include_router(auth.router)
 
@@ -39,4 +51,3 @@ app.include_router(reportes.router, dependencies=protegido)
 @app.get("/", tags=["Health"])
 async def root():
     return {"status": "ok", "env": settings.app_env}
-

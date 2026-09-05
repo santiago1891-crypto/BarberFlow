@@ -162,4 +162,3 @@ class CRUDTurno(CRUDBase[Turno, TurnoCreate, TurnoUpdate]):
 
 
 turno = CRUDTurno(Turno)
-

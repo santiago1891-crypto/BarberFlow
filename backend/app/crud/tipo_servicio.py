@@ -24,4 +24,3 @@ class CRUDTipoServicio(CRUDBase[TipoServicio, TipoServicioCreate, TipoServicioUp
 
 
 tipo_servicio = CRUDTipoServicio(TipoServicio)
-

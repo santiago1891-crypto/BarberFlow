@@ -37,4 +37,3 @@ class BarberoRead(BarberoBase):
     fecha_ingreso: date
     created_at: datetime
     updated_at: datetime
-

@@ -1,7 +1,12 @@
 import { useEffect, useMemo, useState, useImperativeHandle, forwardRef } from "react";
 import { Plus, Pencil, Trash2, CheckCircle2, PlayCircle, XCircle, CalendarCheck } from "lucide-react";
 import { turnosApi, barberosApi, tiposServicioApi } from "../../../lib/resources.js";
-import { formatDateTime, toDatetimeLocalValue, fromDatetimeLocalValue } from "../../../lib/format.js";
+import {
+  formatDateTime,
+  toDateInputValue,
+  toTimeInputValue,
+  combineDateAndTime,
+} from "../../../lib/format.js";
 import { fullName } from "../../../lib/barberStatus.js";
 import { toast } from "../../../lib/toast.js";
 import Badge from "../../ui/Badge.jsx";
@@ -18,10 +23,27 @@ const ESTADO_META = {
   cancelado: { label: "Cancelado", variant: "danger" },
 };
 
+// Debe coincidir exactamente con TRANSICIONES_VALIDAS en app/crud/turno.py del
+// backend. Si un botón de acción rápida permite un salto que el backend no
+// acepta (por ejemplo pendiente -> en_curso, saltándose "confirmado"), el
+// backend responde 409 y la acción "no hace nada" a los ojos del usuario.
+const TRANSICIONES_VALIDAS = {
+  pendiente: ["confirmado", "cancelado"],
+  confirmado: ["en_curso", "cancelado"],
+  en_curso: ["completado", "cancelado"],
+  completado: [],
+  cancelado: [],
+};
+
+function nowParts() {
+  const now = new Date();
+  return { fecha: toDateInputValue(now), hora: toTimeInputValue(now) };
+}
+
 const EMPTY_FORM = {
   barbero_id: "",
   tipo_servicio_id: "",
-  fecha_hora: toDatetimeLocalValue(),
+  ...nowParts(),
   cliente_nombre: "",
   cliente_telefono: "",
   notas: "",
@@ -108,8 +130,12 @@ const Citas = forwardRef(function Citas({ search }, ref) {
   }, [turnos, search, barberosById, tiposById]);
 
   function openCreate() {
+    if (tipos.length === 0) {
+      toast.error('Primero cargá al menos un servicio en "Servicios" — sin eso no se puede agendar.');
+      return;
+    }
     setEditing(null);
-    setForm({ ...EMPTY_FORM, fecha_hora: toDatetimeLocalValue() });
+    setForm({ ...EMPTY_FORM, ...nowParts() });
     setFormError("");
     setModalOpen(true);
   }
@@ -119,7 +145,8 @@ const Citas = forwardRef(function Citas({ search }, ref) {
     setForm({
       barbero_id: String(t.barbero_id),
       tipo_servicio_id: t.tipo_servicio_id,
-      fecha_hora: toDatetimeLocalValue(t.fecha_hora),
+      fecha: toDateInputValue(t.fecha_hora),
+      hora: toTimeInputValue(t.fecha_hora),
       cliente_nombre: t.cliente_nombre || "",
       cliente_telefono: t.cliente_telefono || "",
       notas: t.notas || "",
@@ -132,7 +159,7 @@ const Citas = forwardRef(function Citas({ search }, ref) {
     e.preventDefault();
     setFormError("");
 
-    if (!form.barbero_id || !form.tipo_servicio_id || !form.fecha_hora) {
+    if (!form.barbero_id || !form.tipo_servicio_id || !form.fecha || !form.hora) {
       setFormError("Barbero, servicio y fecha/hora son obligatorios.");
       return;
     }
@@ -140,7 +167,7 @@ const Citas = forwardRef(function Citas({ search }, ref) {
     const payload = {
       barbero_id: Number(form.barbero_id),
       tipo_servicio_id: form.tipo_servicio_id,
-      fecha_hora: fromDatetimeLocalValue(form.fecha_hora),
+      fecha_hora: combineDateAndTime(form.fecha, form.hora),
       cliente_nombre: form.cliente_nombre.trim() || null,
       cliente_telefono: form.cliente_telefono.trim() || null,
       notas: form.notas.trim() || null,
@@ -158,6 +185,8 @@ const Citas = forwardRef(function Citas({ search }, ref) {
       setModalOpen(false);
       await loadTurnos();
     } catch (err) {
+      // Ej: superposición de horario con otro turno del mismo barbero,
+      // o transición de estado inválida — el backend manda el detalle.
       setFormError(err.message || "No se pudo guardar el turno.");
     } finally {
       setSaving(false);
@@ -165,6 +194,12 @@ const Citas = forwardRef(function Citas({ search }, ref) {
   }
 
   async function quickUpdateEstado(turno, estado) {
+    if (!TRANSICIONES_VALIDAS[turno.estado]?.includes(estado)) {
+      toast.error(
+        `No se puede pasar de "${ESTADO_META[turno.estado]?.label}" a "${ESTADO_META[estado]?.label}" directamente.`
+      );
+      return;
+    }
     try {
       await turnosApi.update(turno.id, { estado });
       toast.success("Estado del turno actualizado.");
@@ -264,7 +299,8 @@ const Citas = forwardRef(function Citas({ search }, ref) {
                   const barbero = barberosById.get(t.barbero_id);
                   const tipo = tiposById.get(t.tipo_servicio_id);
                   const meta = ESTADO_META[t.estado] || ESTADO_META.pendiente;
-                  const finalizado = t.estado === "completado" || t.estado === "cancelado";
+                  const permitidos = TRANSICIONES_VALIDAS[t.estado] || [];
+                  const finalizado = permitidos.length === 0;
                   return (
                     <tr key={t.id} className="border-b border-tertiary/60 last:border-0 align-top">
                       <td className="px-2 py-3 text-[#9C9488] whitespace-nowrap">
@@ -285,7 +321,7 @@ const Citas = forwardRef(function Citas({ search }, ref) {
                       </td>
                       <td className="px-2 py-3">
                         <div className="flex items-center justify-end gap-1.5 flex-wrap">
-                          {t.estado === "pendiente" && (
+                          {permitidos.includes("confirmado") && (
                             <button
                               onClick={() => quickUpdateEstado(t, "confirmado")}
                               title="Confirmar"
@@ -294,7 +330,7 @@ const Citas = forwardRef(function Citas({ search }, ref) {
                               <CalendarCheck size={14} />
                             </button>
                           )}
-                          {(t.estado === "confirmado" || t.estado === "pendiente") && (
+                          {permitidos.includes("en_curso") && (
                             <button
                               onClick={() => quickUpdateEstado(t, "en_curso")}
                               title="Iniciar"
@@ -303,7 +339,7 @@ const Citas = forwardRef(function Citas({ search }, ref) {
                               <PlayCircle size={14} />
                             </button>
                           )}
-                          {!finalizado && (
+                          {permitidos.includes("completado") && (
                             <button
                               onClick={() => setConfirmAction({ type: "completar", turno: t })}
                               title="Completar (genera el servicio realizado)"
@@ -321,7 +357,7 @@ const Citas = forwardRef(function Citas({ search }, ref) {
                               <Pencil size={14} />
                             </button>
                           )}
-                          {!finalizado && (
+                          {permitidos.includes("cancelado") && (
                             <button
                               onClick={() => setConfirmAction({ type: "cancelar", turno: t })}
                               title="Cancelar"
@@ -402,13 +438,22 @@ const Citas = forwardRef(function Citas({ search }, ref) {
             </Field>
           </div>
 
-          <Field label="Fecha y hora">
-            <TextInput
-              type="datetime-local"
-              value={form.fecha_hora}
-              onChange={(e) => setForm({ ...form, fecha_hora: e.target.value })}
-            />
-          </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Fecha">
+              <TextInput
+                type="date"
+                value={form.fecha}
+                onChange={(e) => setForm({ ...form, fecha: e.target.value })}
+              />
+            </Field>
+            <Field label="Hora">
+              <TextInput
+                type="time"
+                value={form.hora}
+                onChange={(e) => setForm({ ...form, hora: e.target.value })}
+              />
+            </Field>
+          </div>
 
           <div className="grid grid-cols-2 gap-3">
             <Field label="Cliente">

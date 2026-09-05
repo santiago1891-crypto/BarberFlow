@@ -3,6 +3,7 @@ from typing import Any, Generic, TypeVar
 
 from pydantic import BaseModel
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.base import Base
@@ -11,7 +12,7 @@ from app.db.base import Base
 class ReglaDeNegocioError(Exception):
     """Se lanza cuando una operación viola una regla de negocio (no un error de datos).
 
-    Los routers la capturan y la traducen a un HTTP 409 Conflict.
+    Un manejador global en app/main.py la traduce a un HTTP 409 Conflict.
     """
 
 
@@ -39,7 +40,14 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         obj_data = obj_in.model_dump(exclude_unset=True)
         db_obj = self.model(**obj_data)
         db.add(db_obj)
-        await db.commit()
+        try:
+            await db.commit()
+        except IntegrityError as e:
+            await db.rollback()
+            raise ReglaDeNegocioError(
+                "No se pudo crear el registro: puede haber un valor duplicado "
+                "(por ejemplo, un nombre que ya existe)."
+            ) from e
         await db.refresh(db_obj)
         return db_obj
 
@@ -50,7 +58,14 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         for field, value in update_data.items():
             setattr(db_obj, field, value)
         db.add(db_obj)
-        await db.commit()
+        try:
+            await db.commit()
+        except IntegrityError as e:
+            await db.rollback()
+            raise ReglaDeNegocioError(
+                "No se pudo guardar el cambio: puede haber un valor duplicado "
+                "(por ejemplo, un nombre que ya existe)."
+            ) from e
         await db.refresh(db_obj)
         return db_obj
 
@@ -59,6 +74,13 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         if db_obj is None:
             return None
         await db.delete(db_obj)
-        await db.commit()
+        try:
+            await db.commit()
+        except IntegrityError as e:
+            await db.rollback()
+            raise ReglaDeNegocioError(
+                "No se puede eliminar: hay turnos, servicios o pagos que todavía "
+                "hacen referencia a este registro. Si es un barbero o un tipo de "
+                "servicio, desactivalo en vez de eliminarlo."
+            ) from e
         return db_obj
-

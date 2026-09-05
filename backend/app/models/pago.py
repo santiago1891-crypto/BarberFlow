@@ -46,4 +46,3 @@ class Pago(Base):
 
     def __repr__(self) -> str:
         return f"<Pago {self.id} {self.estado}>"
-

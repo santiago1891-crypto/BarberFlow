@@ -41,4 +41,3 @@ class Barbero(Base):
 
     def __repr__(self) -> str:
         return f"<Barbero {self.id}: {self.nombre} {self.apellido}>"
-

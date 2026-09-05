@@ -56,4 +56,3 @@ class CRUDPago(CRUDBase[Pago, PagoCreate, PagoUpdate]):
 
 
 pago = CRUDPago(Pago)
-

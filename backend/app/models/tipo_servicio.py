@@ -39,4 +39,3 @@ class TipoServicio(Base):
 
     def __repr__(self) -> str:
         return f"<TipoServicio {self.nombre}>"
-

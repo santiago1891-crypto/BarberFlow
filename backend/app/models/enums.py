@@ -21,4 +21,3 @@ class MetodoPago(str, enum.Enum):
     tarjeta_credito = "tarjeta_credito"
     transferencia = "transferencia"
     mercado_pago = "mercado_pago"
-

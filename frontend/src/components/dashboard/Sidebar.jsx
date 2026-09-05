@@ -14,12 +14,21 @@ import {
 const NAV_ITEMS = [
   { id: "panel", label: "Panel de Control", icon: Gauge },
   { id: "citas", label: "Citas", icon: CalendarDays },
+  { id: "servicios", label: "Servicios", icon: Scissors },
   { id: "personal", label: "Personal", icon: Users },
   { id: "historial", label: "Historial de Ventas", icon: Receipt },
   { id: "finanzas", label: "Finanzas", icon: Wallet },
 ];
 
-export default function Sidebar({ active, onNavigate, onNuevaCita, username, variant = "desktop", onClose }) {
+export default function Sidebar({
+  active,
+  onNavigate,
+  onNuevaCita,
+  onNuevoServicio,
+  username,
+  variant = "desktop",
+  onClose,
+}) {
   const wrapperClass =
     variant === "desktop"
       ? "hidden md:flex w-64 shrink-0 flex-col bg-card border-r border-primary/[0.12] h-screen sticky top-0"
@@ -73,13 +82,20 @@ export default function Sidebar({ active, onNavigate, onNuevaCita, username, var
         </ul>
       </nav>
 
-      <div className="px-3 pb-4">
+      <div className="px-3 pb-4 space-y-2">
         <button
           onClick={onNuevaCita}
           className="w-full flex items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold bg-primary text-neutral hover:bg-primary-dark transition-colors"
         >
           <Plus size={16} strokeWidth={2.5} />
           Nueva Cita
+        </button>
+        <button
+          onClick={onNuevoServicio}
+          className="w-full flex items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold bg-transparent border border-primary/40 text-primary hover:bg-primary-soft transition-colors"
+        >
+          <Plus size={16} strokeWidth={2.5} />
+          Nuevo Servicio
         </button>
       </div>
 

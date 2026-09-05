@@ -54,4 +54,3 @@ async def eliminar_pago(pago_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
     db_obj = await crud.pago.remove(db, id=pago_id)
     if db_obj is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pago no encontrado")
-

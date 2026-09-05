@@ -24,4 +24,3 @@ class CRUDBarbero(CRUDBase[Barbero, BarberoCreate, BarberoUpdate]):
 
 
 barbero = CRUDBarbero(Barbero)
-

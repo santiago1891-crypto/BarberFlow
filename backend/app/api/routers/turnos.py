@@ -82,4 +82,3 @@ async def completar_turno(turno_id: uuid.UUID, body: TurnoCompletar, db: AsyncSe
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except ReglaDeNegocioError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
-

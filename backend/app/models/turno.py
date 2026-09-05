@@ -46,4 +46,3 @@ class Turno(Base):
 
     def __repr__(self) -> str:
         return f"<Turno {self.id} {self.fecha_hora}>"
-

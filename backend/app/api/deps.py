@@ -25,4 +25,3 @@ async def get_current_admin(token: str = Depends(oauth2_scheme)) -> str:
 
 
 __all__ = ["get_db", "get_current_admin"]
-

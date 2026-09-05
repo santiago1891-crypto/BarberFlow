@@ -48,4 +48,3 @@ async def eliminar_tipo_servicio(tipo_servicio_id: uuid.UUID, db: AsyncSession =
     db_obj = await crud.tipo_servicio.remove(db, id=tipo_servicio_id)
     if db_obj is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tipo de servicio no encontrado")
-

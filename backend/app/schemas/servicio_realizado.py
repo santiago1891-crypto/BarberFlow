@@ -36,4 +36,3 @@ class ServicioRealizadoRead(ServicioRealizadoBase):
     id: uuid.UUID
     comision_monto: Decimal
     created_at: datetime
-

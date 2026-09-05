@@ -36,4 +36,3 @@ class CRUDServicioRealizado(CRUDBase[ServicioRealizado, ServicioRealizadoCreate,
 
 
 servicio_realizado = CRUDServicioRealizado(ServicioRealizado)
-

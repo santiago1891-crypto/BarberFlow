@@ -76,4 +76,3 @@ async def get_ganancia_barberia_hoy(db: AsyncSession) -> GananciaBarberiaHoyResu
         total_comisiones_pagadas=total_comisiones_pagadas,
         ganancia_barberia=total_facturado - total_comisiones_pagadas,
     )
-

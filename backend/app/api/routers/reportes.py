@@ -35,4 +35,3 @@ async def ganancias_barberos_hoy(db: AsyncSession = Depends(get_db)):
 async def ganancia_barberia_hoy(db: AsyncSession = Depends(get_db)):
     """Cuánto se queda la barbería HOY: total facturado menos comisiones pagadas a barberos."""
     return await crud_reportes.get_ganancia_barberia_hoy(db)
-

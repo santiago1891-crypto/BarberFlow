@@ -4,6 +4,7 @@ import Sidebar from "./Sidebar.jsx";
 import Topbar from "./Topbar.jsx";
 import PanelControl from "./views/PanelControl.jsx";
 import Citas from "./views/Citas.jsx";
+import Servicios from "./views/Servicios.jsx";
 import Personal from "./views/Personal.jsx";
 import HistorialVentas from "./views/HistorialVentas.jsx";
 import Finanzas from "./views/Finanzas.jsx";
@@ -12,6 +13,7 @@ import { reportesApi } from "../../lib/resources.js";
 const TITLES = {
   panel: "Panel de Control",
   citas: "Citas",
+  servicios: "Servicios",
   personal: "Personal",
   historial: "Historial de Ventas",
   finanzas: "Finanzas",
@@ -34,6 +36,7 @@ export default function DashboardLayout({ username, onLogout }) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
   const citasRef = useRef(null);
+  const serviciosRef = useRef(null);
 
   useEffect(() => {
     let alive = true;
@@ -61,9 +64,21 @@ export default function DashboardLayout({ username, onLogout }) {
     setTimeout(() => citasRef.current?.openCreate(), 60);
   }
 
+  function handleNuevoServicio() {
+    setView("servicios");
+    setMobileNavOpen(false);
+    setTimeout(() => serviciosRef.current?.openCreate(), 60);
+  }
+
   return (
     <div className="min-h-screen bg-neutral flex">
-      <Sidebar active={view} onNavigate={navigate} onNuevaCita={handleNuevaCita} username={username} />
+      <Sidebar
+        active={view}
+        onNavigate={navigate}
+        onNuevaCita={handleNuevaCita}
+        onNuevoServicio={handleNuevoServicio}
+        username={username}
+      />
 
       {mobileNavOpen && (
         <div className="fixed inset-0 z-40 flex md:hidden">
@@ -74,6 +89,7 @@ export default function DashboardLayout({ username, onLogout }) {
               active={view}
               onNavigate={navigate}
               onNuevaCita={handleNuevaCita}
+              onNuevoServicio={handleNuevoServicio}
               username={username}
               onClose={() => setMobileNavOpen(false)}
             />
@@ -97,6 +113,7 @@ export default function DashboardLayout({ username, onLogout }) {
 
           {view === "panel" && <PanelControl onNavigate={navigate} search={search} />}
           {view === "citas" && <Citas ref={citasRef} search={search} />}
+          {view === "servicios" && <Servicios ref={serviciosRef} search={search} />}
           {view === "personal" && <Personal search={search} />}
           {view === "historial" && <HistorialVentas search={search} />}
           {view === "finanzas" && <Finanzas search={search} />}

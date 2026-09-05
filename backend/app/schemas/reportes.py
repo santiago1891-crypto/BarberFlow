@@ -54,4 +54,3 @@ class GananciaBarberiaHoyResumen(BaseModel):
     total_facturado: Decimal  # todo lo cobrado hoy, entre todos los barberos
     total_comisiones_pagadas: Decimal  # suma de lo que se llevan los barberos
     ganancia_barberia: Decimal  # total_facturado - total_comisiones_pagadas
-

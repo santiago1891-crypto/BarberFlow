@@ -46,4 +46,3 @@ async def eliminar_barbero(barbero_id: int, db: AsyncSession = Depends(get_db)):
     db_obj = await crud.barbero.remove(db, id=barbero_id)
     if db_obj is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Barbero no encontrado")
-

@@ -51,4 +51,3 @@ class TurnoCompletar(BaseModel):
         None, ge=0, le=100, description="Sobreescribe el porcentaje_comision del barbero"
     )
     notas: str | None = None
-

@@ -32,4 +32,3 @@ def decode_access_token(token: str) -> str | None:
         return payload.get("sub")
     except jwt.PyJWTError:
         return None
-

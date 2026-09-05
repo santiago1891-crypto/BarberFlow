@@ -65,4 +65,3 @@ async def eliminar_servicio_realizado(servicio_id: uuid.UUID, db: AsyncSession =
     db_obj = await crud.servicio_realizado.remove(db, id=servicio_id)
     if db_obj is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Servicio realizado no encontrado")
-

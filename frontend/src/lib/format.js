@@ -34,6 +34,26 @@ export function toDatetimeLocalValue(value) {
   )}`;
 }
 
+/** ISO string -> valor para <input type="date"> (hora local). */
+export function toDateInputValue(value) {
+  const d = value ? new Date(value) : new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/** ISO string -> valor para <input type="time"> (hora local). */
+export function toTimeInputValue(value) {
+  const d = value ? new Date(value) : new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/** Combina <input type="date"> + <input type="time"> en un ISO string para la API. */
+export function combineDateAndTime(dateStr, timeStr) {
+  if (!dateStr || !timeStr) return null;
+  return new Date(`${dateStr}T${timeStr}:00`).toISOString();
+}
+
 /** Valor de <input type="datetime-local"> -> ISO string para mandar a la API. */
 export function fromDatetimeLocalValue(value) {
   if (!value) return null;
