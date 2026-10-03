@@ -14,6 +14,7 @@ const EMPTY_FORM = {
   descripcion: "",
   precio_base: "",
   duracion_min: "30",
+  comision_pct: "40",
   activo: true,
 };
 
@@ -74,6 +75,7 @@ const Servicios = forwardRef(function Servicios({ search }, ref) {
       descripcion: t.descripcion || "",
       precio_base: String(t.precio_base),
       duracion_min: String(t.duracion_min),
+      comision_pct: Number.isFinite(Number(t.comision_pct)) ? String(t.comision_pct) : "40",
       activo: t.activo,
     });
     setFormError("");
@@ -96,12 +98,17 @@ const Servicios = forwardRef(function Servicios({ search }, ref) {
       setFormError("La duración tiene que ser mayor a 0 minutos.");
       return;
     }
+    if (form.comision_pct === "" || Number(form.comision_pct) < 0 || Number(form.comision_pct) > 100) {
+      setFormError("La comisión tiene que ser un porcentaje entre 0 y 100.");
+      return;
+    }
 
     const payload = {
       nombre: form.nombre.trim(),
       descripcion: form.descripcion.trim() || null,
       precio_base: form.precio_base,
       duracion_min: Number(form.duracion_min),
+      comision_pct: form.comision_pct,
       activo: form.activo,
     };
 
@@ -198,6 +205,7 @@ const Servicios = forwardRef(function Servicios({ search }, ref) {
                   <th className="px-2 py-2.5 font-medium">Servicio</th>
                   <th className="px-2 py-2.5 font-medium">Duración</th>
                   <th className="px-2 py-2.5 font-medium">Precio</th>
+                  <th className="px-2 py-2.5 font-medium">Comisión</th>
                   <th className="px-2 py-2.5 font-medium">Estado</th>
                   <th className="px-2 py-2.5 font-medium text-right">Acciones</th>
                 </tr>
@@ -215,6 +223,9 @@ const Servicios = forwardRef(function Servicios({ search }, ref) {
                       </span>
                     </td>
                     <td className="px-2 py-3 text-primary font-semibold">{formatMoney(t.precio_base)}</td>
+                    <td className="px-2 py-3 text-[#9C9488]">
+                      {Number.isFinite(Number(t.comision_pct)) ? `${Number(t.comision_pct)}%` : "—"}
+                    </td>
                     <td className="px-2 py-3">
                       <Badge variant={t.activo ? "success" : "danger"}>
                         {t.activo ? "Activo" : "Inactivo"}
@@ -317,6 +328,17 @@ const Servicios = forwardRef(function Servicios({ search }, ref) {
               />
             </Field>
           </div>
+
+          <Field label="Comisión del barbero (%)" hint="Se usa automáticamente al registrar un servicio de este tipo">
+            <TextInput
+              type="number"
+              min="0"
+              max="100"
+              step="0.01"
+              value={form.comision_pct}
+              onChange={(e) => setForm({ ...form, comision_pct: e.target.value })}
+            />
+          </Field>
 
           {editing && (
             <label className="flex items-center gap-2 cursor-pointer select-none mb-1">

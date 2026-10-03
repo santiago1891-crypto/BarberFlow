@@ -1,15 +1,6 @@
 import { useEffect, useMemo, useState, forwardRef, useImperativeHandle } from "react";
-import {
-  DollarSign,
-  Scissors,
-  Receipt,
-  ChevronLeft,
-  ChevronRight,
-  CreditCard,
-  Filter,
-  Plus,
-} from "lucide-react";
-import { serviciosRealizadosApi, barberosApi, tiposServicioApi, turnosApi, pagosApi } from "../../../lib/resources.js";
+import { DollarSign, Scissors, Receipt, ChevronLeft, ChevronRight, Filter, Plus } from "lucide-react";
+import { serviciosRealizadosApi, barberosApi, tiposServicioApi, turnosApi } from "../../../lib/resources.js";
 import {
   formatMoney,
   formatDateTime,
@@ -25,14 +16,6 @@ import { Field, TextInput, SelectInput, TextArea } from "../../ui/Field.jsx";
 import { LoadingBlock, EmptyBlock } from "../../ui/StateBlocks.jsx";
 
 const PAGE_SIZE = 10;
-
-const METODOS = [
-  ["efectivo", "Efectivo"],
-  ["tarjeta_debito", "Tarjeta de débito"],
-  ["tarjeta_credito", "Tarjeta de crédito"],
-  ["transferencia", "Transferencia"],
-  ["mercado_pago", "Mercado Pago"],
-];
 
 function rangeFor(preset) {
   const now = new Date();
@@ -75,11 +58,6 @@ const HistorialVentas = forwardRef(function HistorialVentas({ search }, ref) {
   const [preset, setPreset] = useState("mes");
   const [barberoFiltro, setBarberoFiltro] = useState("");
   const [page, setPage] = useState(0);
-
-  const [pagoModal, setPagoModal] = useState(null); // servicio
-  const [pagoForm, setPagoForm] = useState({ metodo: "efectivo", monto: "", estado: "pagado", referencia_externa: "" });
-  const [savingPago, setSavingPago] = useState(false);
-  const [pagoError, setPagoError] = useState("");
 
   const [servicioModalOpen, setServicioModalOpen] = useState(false);
   const [servicioForm, setServicioForm] = useState(EMPTY_SERVICIO_FORM);
@@ -161,42 +139,6 @@ const HistorialVentas = forwardRef(function HistorialVentas({ search }, ref) {
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const pageItems = filtered.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
 
-  function openPago(servicio) {
-    setPagoModal(servicio);
-    setPagoForm({
-      metodo: "efectivo",
-      monto: String(servicio.precio_cobrado),
-      estado: "pagado",
-      referencia_externa: "",
-    });
-    setPagoError("");
-  }
-
-  async function handlePagoSubmit(e) {
-    e.preventDefault();
-    setPagoError("");
-    if (!pagoForm.monto || Number(pagoForm.monto) <= 0) {
-      setPagoError("Ingresá un monto válido.");
-      return;
-    }
-    setSavingPago(true);
-    try {
-      await pagosApi.create({
-        servicio_realizado_id: pagoModal.id,
-        metodo: pagoForm.metodo,
-        monto: pagoForm.monto,
-        estado: pagoForm.estado,
-        referencia_externa: pagoForm.referencia_externa.trim() || null,
-      });
-      toast.success("Pago registrado.");
-      setPagoModal(null);
-    } catch (err) {
-      setPagoError(err.message || "No se pudo registrar el pago.");
-    } finally {
-      setSavingPago(false);
-    }
-  }
-
   function openCreateServicio() {
     if (barberosActivos.length === 0) {
       toast.error('Primero cargá al menos un barbero activo en "Personal".');
@@ -212,23 +154,23 @@ const HistorialVentas = forwardRef(function HistorialVentas({ search }, ref) {
   }
 
   function handleBarberoChange(barberoId) {
-    const barbero = barberosById.get(Number(barberoId)) || barberosActivos.find((b) => String(b.id) === barberoId);
-    setServicioForm((f) => ({
-      ...f,
-      barbero_id: barberoId,
-      // Prellena con la comisión pactada del barbero; queda editable por si
-      // este servicio puntual tiene un acuerdo distinto.
-      comision_pct: f.comision_pct || (barbero ? String(barbero.porcentaje_comision) : f.comision_pct),
-    }));
+    setServicioForm((f) => ({ ...f, barbero_id: barberoId }));
   }
 
   function handleTipoChange(tipoId) {
     const tipo = tiposById.get(tipoId) || tiposActivos.find((t) => t.id === tipoId);
+    // Si el tipo de servicio es de antes de que existiera esta columna (o
+    // por algún motivo no trae comision_pct), usamos 0 en vez de "undefined"
+    // — eso es lo que generaba el NaN.
+    const comisionDelTipo = tipo && Number.isFinite(Number(tipo.comision_pct)) ? String(tipo.comision_pct) : "0";
     setServicioForm((f) => ({
       ...f,
       tipo_servicio_id: tipoId,
-      // Prellena con el precio de lista; queda editable (descuentos, combos, etc.).
+      // Precio y comisión son del tipo de servicio elegido. El precio queda
+      // editable (descuentos, combos, etc.); la comisión no — es la que ya
+      // definiste para ese servicio en "Servicios".
       precio_cobrado: f.precio_cobrado || (tipo ? String(tipo.precio_base) : f.precio_cobrado),
+      comision_pct: tipo ? comisionDelTipo : f.comision_pct,
     }));
   }
 
@@ -236,16 +178,16 @@ const HistorialVentas = forwardRef(function HistorialVentas({ search }, ref) {
     e.preventDefault();
     setServicioError("");
 
-    if (!servicioForm.barbero_id || !servicioForm.tipo_servicio_id) {
-      setServicioError("Elegí barbero y servicio.");
+    if (!servicioForm.barbero_id) {
+      setServicioError("Elegí un barbero.");
+      return;
+    }
+    if (!servicioForm.tipo_servicio_id || servicioForm.comision_pct === "") {
+      setServicioError("Elegí un servicio para determinar la comisión.");
       return;
     }
     if (!servicioForm.precio_cobrado || Number(servicioForm.precio_cobrado) < 0) {
       setServicioError("Ingresá un precio válido.");
-      return;
-    }
-    if (servicioForm.comision_pct === "" || Number(servicioForm.comision_pct) < 0) {
-      setServicioError("Ingresá un porcentaje de comisión válido.");
       return;
     }
 
@@ -331,7 +273,7 @@ const HistorialVentas = forwardRef(function HistorialVentas({ search }, ref) {
         ) : (
           <>
             <div className="overflow-x-auto -mx-2">
-              <table className="w-full text-sm min-w-[760px]">
+              <table className="w-full text-sm min-w-[720px]">
                 <thead>
                   <tr className="text-left font-mono text-[10px] uppercase tracking-wide text-[#6b6459] border-b border-tertiary">
                     <th className="px-2 py-2.5 font-medium">ID</th>
@@ -341,7 +283,6 @@ const HistorialVentas = forwardRef(function HistorialVentas({ search }, ref) {
                     <th className="px-2 py-2.5 font-medium">Barbero</th>
                     <th className="px-2 py-2.5 font-medium text-right">Monto</th>
                     <th className="px-2 py-2.5 font-medium text-right">Comisión</th>
-                    <th className="px-2 py-2.5 font-medium text-right">Acciones</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -365,15 +306,6 @@ const HistorialVentas = forwardRef(function HistorialVentas({ search }, ref) {
                         </td>
                         <td className="px-2 py-3 text-right text-[#9C9488]">
                           {formatMoney(s.comision_monto)}
-                        </td>
-                        <td className="px-2 py-3 text-right">
-                          <button
-                            onClick={() => openPago(s)}
-                            title="Registrar pago"
-                            className="p-1.5 rounded-lg text-[#6b6459] hover:text-success hover:bg-success-soft transition-colors inline-flex"
-                          >
-                            <CreditCard size={14} />
-                          </button>
                         </td>
                       </tr>
                     );
@@ -484,27 +416,15 @@ const HistorialVentas = forwardRef(function HistorialVentas({ search }, ref) {
             </Field>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Precio cobrado" hint="Se prellena con el precio de lista del servicio">
-              <TextInput
-                type="number"
-                min="0"
-                step="0.01"
-                value={servicioForm.precio_cobrado}
-                onChange={(e) => setServicioForm({ ...servicioForm, precio_cobrado: e.target.value })}
-              />
-            </Field>
-            <Field label="Comisión (%)" hint="Se prellena con la del barbero">
-              <TextInput
-                type="number"
-                min="0"
-                max="100"
-                step="0.01"
-                value={servicioForm.comision_pct}
-                onChange={(e) => setServicioForm({ ...servicioForm, comision_pct: e.target.value })}
-              />
-            </Field>
-          </div>
+          <Field label="Precio cobrado" hint="Se prellena con el precio de lista del servicio">
+            <TextInput
+              type="number"
+              min="0"
+              step="0.01"
+              value={servicioForm.precio_cobrado}
+              onChange={(e) => setServicioForm({ ...servicioForm, precio_cobrado: e.target.value })}
+            />
+          </Field>
 
           <Field label="Notas" hint="Opcional">
             <TextArea
@@ -517,79 +437,6 @@ const HistorialVentas = forwardRef(function HistorialVentas({ search }, ref) {
           {servicioError && (
             <p className="text-[13px] text-danger bg-danger-soft border border-danger/40 rounded-lg px-3 py-2 mt-1">
               {servicioError}
-            </p>
-          )}
-        </form>
-      </Modal>
-
-      <Modal
-        open={!!pagoModal}
-        onClose={() => !savingPago && setPagoModal(null)}
-        title="Registrar pago"
-        subtitle={pagoModal ? `Servicio #${pagoModal.id.slice(0, 8)}` : ""}
-        footer={
-          <>
-            <button
-              onClick={() => setPagoModal(null)}
-              disabled={savingPago}
-              className="text-sm px-4 py-2 rounded-lg border border-tertiary text-[#9C9488] hover:text-[#F2EDE3] hover:border-primary/30 transition-colors"
-            >
-              Cancelar
-            </button>
-            <button
-              form="pago-form"
-              type="submit"
-              disabled={savingPago}
-              className="text-sm px-4 py-2 rounded-lg font-semibold bg-primary text-neutral disabled:opacity-70"
-            >
-              {savingPago ? "Guardando…" : "Registrar pago"}
-            </button>
-          </>
-        }
-      >
-        <form id="pago-form" onSubmit={handlePagoSubmit}>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Método">
-              <SelectInput
-                value={pagoForm.metodo}
-                onChange={(e) => setPagoForm({ ...pagoForm, metodo: e.target.value })}
-              >
-                {METODOS.map(([key, label]) => (
-                  <option key={key} value={key}>
-                    {label}
-                  </option>
-                ))}
-              </SelectInput>
-            </Field>
-            <Field label="Monto">
-              <TextInput
-                type="number"
-                min="0"
-                step="0.01"
-                value={pagoForm.monto}
-                onChange={(e) => setPagoForm({ ...pagoForm, monto: e.target.value })}
-              />
-            </Field>
-          </div>
-          <Field label="Estado">
-            <SelectInput
-              value={pagoForm.estado}
-              onChange={(e) => setPagoForm({ ...pagoForm, estado: e.target.value })}
-            >
-              <option value="pagado">Pagado</option>
-              <option value="pendiente">Pendiente</option>
-              <option value="reembolsado">Reembolsado</option>
-            </SelectInput>
-          </Field>
-          <Field label="Referencia" hint="Opcional — Nº de operación, últimos 4 dígitos, etc.">
-            <TextInput
-              value={pagoForm.referencia_externa}
-              onChange={(e) => setPagoForm({ ...pagoForm, referencia_externa: e.target.value })}
-            />
-          </Field>
-          {pagoError && (
-            <p className="text-[13px] text-danger bg-danger-soft border border-danger/40 rounded-lg px-3 py-2 mt-1">
-              {pagoError}
             </p>
           )}
         </form>

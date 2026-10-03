@@ -1,13 +1,4 @@
 # BarberFlow
-
-<p align="center">
-  <strong>Manage your barbershop with greater clarity, control, and efficiency.</strong>
-</p>
-
-<p align="center">
-  BarberFlow centralizes your barbershop's daily operations, team, and finances in one place.
-</p>
-
 <p align="center">
   <a href="https://docs.python.org/3/" target="_blank" rel="noopener noreferrer"><img src="https://img.shields.io/badge/Python-3.12%2B-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python" /></a>
   <a href="https://fastapi.tiangolo.com/" target="_blank" rel="noopener noreferrer"><img src="https://img.shields.io/badge/FastAPI-0.136%2B-009688?style=for-the-badge&logo=fastapi&logoColor=white" alt="FastAPI" /></a>
@@ -16,161 +7,86 @@
   <a href="https://tailwindcss.com/docs" target="_blank" rel="noopener noreferrer"><img src="https://img.shields.io/badge/Tailwind_CSS-3-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white" alt="Tailwind CSS" /></a>
   <a href="https://www.postgresql.org/docs/" target="_blank" rel="noopener noreferrer"><img src="https://img.shields.io/badge/PostgreSQL-compatible-4169E1?style=for-the-badge&logo=postgresql&logoColor=white" alt="PostgreSQL" /></a>
 </p>
+Sistema de gestión para barberías: organiza el equipo, los turnos, los servicios realizados, los pagos y los reportes desde una sola aplicación.
 
-## About the Project
+## Funcionalidades
 
-BarberFlow is a management system for barbershops, designed to help owners and managers run their business and team more efficiently. The platform brings together, in one experience, information that is often scattered across appointment books, spreadsheets, and manual records.
+- Inicio de sesión de administrador con JWT.
+- Gestión de barberos y disponibilidad del equipo.
+- Administración de servicios, precios y comisiones.
+- Registro y seguimiento de turnos.
+- Historial de servicios realizados, pagos y ventas.
+- Panel de control e informes operativos y financieros.
+- Interfaz adaptable a escritorio y móvil.
 
-The system helps organize daily operations, manage appointments and shifts, oversee barbers and services, record completed services, and track payments. It also provides a clearer view of business performance through reports and centralized data, so decisions do not have to rely on incomplete or outdated information.
+## Tecnologías
 
-BarberFlow aims to reduce administrative work, improve service tracking, and make team coordination easier. This allows users to spend more time taking care of their clients while relying on a tool that helps them understand how their barbershop is performing and evolving.
+- **Frontend:** React 18, Vite, Tailwind CSS y Lucide React.
+- **Backend:** Python 3.12+, FastAPI, SQLAlchemy, Pydantic Settings y Uvicorn.
+- **Base de datos:** PostgreSQL; asyncpg para la API y psycopg2 para las migraciones Alembic.
+- **Infraestructura local:** Docker Compose, con frontend Nginx y PostgreSQL persistente.
 
-## Features
+## Requisitos
 
-- Administrator authentication using JWT.
-- Dashboard with an overview of daily operations.
-- Barbershop staff management and team availability status.
-- Service types and pricing management.
-- Appointment and shift registration and tracking.
-- Completed service records.
-- Payment and revenue management.
-- Sales history.
-- Reports for reviewing financial and operational performance.
-- Business rule and validation error handling in the API.
-- Responsive interface for daily use on desktop and smaller screens.
+- Docker Desktop (incluye Docker Compose).
+- Python 3.12+ solo para generar el hash de contraseña si no se usa el contenedor.
 
-## Technologies Used
+## Inicio con Docker
 
-### Frontend
+1. Copia la plantilla de variables de entorno:
 
-- **React 18** for building the user interface.
-- **Vite** as the development and build tool.
-- **Tailwind CSS** for styling and the visual system.
-- **Lucide React** for interface icons.
+   ```powershell
+   Copy-Item .env.example .env
+   ```
 
-### Backend
+2. Genera el hash de la contraseña del administrador. El comando solicita la contraseña dos veces:
 
-- **Python 3.12+** as the main programming language.
-- **FastAPI** for the REST API and OpenAPI documentation.
-- **SQLAlchemy** for data access and modeling.
-- **Pydantic Settings** for environment-based configuration.
-- **PyJWT** and **bcrypt** for authentication and credential security.
-- **Uvicorn** as the ASGI server.
-- **asyncpg** for the PostgreSQL connection.
-- **Alembic** for database migrations.
+   ```powershell
+   docker compose run --build --rm --no-deps backend python generar_hash_admin.py
+   ```
 
-## Project Structure
+   Copia la línea `ADMIN_PASSWORD_HASH=...` que imprime el comando en `.env`, reemplazando el valor de ejemplo. Cambia también `SECRET_KEY` por una clave aleatoria antes de iniciar la aplicación. Puedes generar una con Python:
+
+   ```powershell
+   python -c "import secrets; print(secrets.token_urlsafe(32))"
+   ```
+
+3. Construye e inicia todos los servicios:
+
+   ```powershell
+   docker compose up --build
+   ```
+
+4. Abre la aplicación:
+
+   - Frontend: <http://localhost:5173>
+   - API y estado: <http://localhost:8000>
+   - Documentación interactiva: <http://localhost:8000/docs>
+
+La API espera a que PostgreSQL esté saludable, aplica las migraciones Alembic y luego inicia. Los datos de PostgreSQL permanecen en el volumen `postgres_data` al detener los contenedores.
+
+Para detener los servicios, usa `Ctrl+C` y luego `docker compose down`. Para borrar también la base de datos local, ejecuta `docker compose down -v`; esto elimina permanentemente los datos guardados en el volumen.
+
+## Configuración
+
+`.env.example` contiene la configuración local completa. Los valores de PostgreSQL y `DATABASE_URL` deben coincidir. `CORS_ORIGINS` debe incluir el origen desde el que se abre el frontend, por defecto `http://localhost:5173`.
+
+No uses los valores de ejemplo en un entorno público. Configura una contraseña segura, un `SECRET_KEY` aleatorio y credenciales propias de PostgreSQL. Si una contraseña de PostgreSQL contiene caracteres especiales, codifícala para usarla dentro de `DATABASE_URL`.
+
+## Desarrollo sin Docker
+
+También puedes iniciar el frontend con `npm install` y `npm run dev` desde `frontend/`, y la API desde `backend/` con `uvicorn app.main:app --reload`. En ese caso, configura `DATABASE_URL` en `backend/.env` para que apunte a PostgreSQL accesible desde el equipo, por ejemplo con el host `localhost`, e instala las dependencias con `pip install -e .`.
+
+## Estructura
 
 ```text
-BarberFlow/
-├── backend/
-│   ├── app/
-│   │   ├── api/          # Dependencies, authentication, and routers
-│   │   ├── core/         # Configuration and security
-│   │   ├── crud/         # Business operations and data access
-│   │   ├── db/           # Sessions and database configuration
-│   │   ├── models/       # SQLAlchemy models
-│   │   └── schemas/      # Pydantic validation schemas
-│   ├── pyproject.toml
-│   └── README.md
-└── frontend/
-    ├── src/
-    │   ├── components/   # Dashboard components and views
-    │   └── lib/          # API client, authentication, and utilities
-    ├── package.json
-    └── vite.config.js
+backend/
+  app/             API, configuración, modelos, esquemas y acceso a datos
+  migrations/      Migraciones Alembic
+  Dockerfile
+frontend/
+  src/             Aplicación React
+  Dockerfile       Build Vite y servidor Nginx
+compose.yaml       Servicios de frontend, API y PostgreSQL
+.env.example      Plantilla de configuración local
 ```
-
-## Requirements
-
-- Python 3.12 or higher.
-- Node.js 18 or higher and npm.
-- PostgreSQL running locally or remotely.
-- A database created for BarberFlow.
-
-## Backend Setup
-
-From the `backend` directory, create a virtual environment and install the dependencies:
-
-```bash
-cd backend
-python -m venv .venv
-```
-
-On Windows PowerShell:
-
-```powershell
-.venv\Scripts\Activate.ps1
-pip install -e .
-```
-
-Create a `backend/.env` file with a configuration similar to this:
-
-```env
-DATABASE_URL=postgresql+asyncpg://username:password@localhost:5432/barberflow
-APP_ENV=development
-DEBUG=true
-ADMIN_USERNAME=admin
-ADMIN_PASSWORD_HASH=paste_the_admin_password_hash_here
-SECRET_KEY=replace_with_a_secure_private_key
-ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=120
-CORS_ORIGINS=http://localhost:5173
-```
-
-To generate the administrator password hash, use the script included in the backend:
-
-```bash
-python generar_hash_admin.py
-```
-
-Start the API with:
-
-```bash
-uvicorn app.main:app --reload
-```
-
-The API will be available at `http://localhost:8000`. FastAPI's interactive documentation is available at:
-
-- Swagger UI: `http://localhost:8000/docs`
-- ReDoc: `http://localhost:8000/redoc`
-
-## Frontend Setup
-
-In another terminal, install the dependencies and start the development server:
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-By default, the frontend runs at `http://localhost:5173` and uses `http://localhost:8000` as the API URL. To change it, create `frontend/.env`:
-
-```env
-VITE_API_URL=http://localhost:8000
-```
-
-## Available Scripts
-
-### Frontend
-
-```bash
-npm run dev       # Starts Vite in development mode
-npm run build     # Generates the production build
-npm run preview   # Serves the generated build locally
-```
-
-### Backend
-
-```bash
-uvicorn app.main:app --reload  # Starts the API with auto-reload
-```
-
-## General Flow
-
-1. The administrator logs in through the frontend.
-2. The backend validates the credentials and returns a JWT token.
-3. The frontend stores the token and sends it with protected requests.
-4. The API processes barbershop operations and persists the information in PostgreSQL.
-5. The dashboard displays activity, records, and available reports.
