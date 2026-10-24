@@ -1,48 +1,67 @@
+
 services:
   db:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-barberflow}
-      POSTGRES_USER: ${POSTGRES_USER:-barberflow}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-barberflow}
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?Definí POSTGRES_PASSWORD en tu .env (copiá .env.example)}"
+      POSTGRES_DB: barberia
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - barberflow_db_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-barberflow} -d ${POSTGRES_DB:-barberflow}"]
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
       timeout: 5s
       retries: 10
 
   backend:
-    build:
-      context: ./backend
+    build: ./backend
+    restart: unless-stopped
     environment:
-      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://barberflow:barberflow@db:5432/barberflow}
-      APP_ENV: ${APP_ENV:-development}
-      DEBUG: ${DEBUG:-false}
-      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
-      ADMIN_PASSWORD_HASH: ${ADMIN_PASSWORD_HASH:?Configura ADMIN_PASSWORD_HASH en .env}
-      SECRET_KEY: ${SECRET_KEY:?Configura SECRET_KEY en .env}
-      ALGORITHM: ${ALGORITHM:-HS256}
-      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-120}
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
-    ports:
-      - "${BACKEND_PORT:-8000}:8000"
+      DATABASE_URL: "postgresql+asyncpg://postgres:${POSTGRES_PASSWORD}@db:5432/barberia"
+      APP_ENV: development
+      DEBUG: "True"
+      ADMIN_USERNAME: "${ADMIN_USERNAME:-admin}"
+      ADMIN_PASSWORD_HASH: "${ADMIN_PASSWORD_HASH:?Generá el hash primero con generar_hash_admin.py}"
+      SECRET_KEY: "${SECRET_KEY:?Definí SECRET_KEY en tu .env, una clave larga y aleatoria}"
+      ALGORITHM: HS256
+      ACCESS_TOKEN_EXPIRE_MINUTES: "120"
+      CORS_ORIGINS: http://localhost:5173
+      SKIP_AUTO_MIGRATE: "${SKIP_AUTO_MIGRATE:-false}"
     depends_on:
       db:
         condition: service_healthy
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      # Volumen nombrado para .venv: evita que el bind-mount de arriba
+      # "tape" el entorno virtual que ya quedó instalado dentro de la
+      # imagen al construirla.
+      - backend_venv:/app/.venv
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
 
   frontend:
-    build:
-      context: ./frontend
-      args:
-        VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
-    ports:
-      - "${FRONTEND_PORT:-5173}:80"
+    build: ./frontend
+    restart: unless-stopped
+    environment:
+      # Esto lo usa el NAVEGADOR (fetch corre del lado del cliente, no
+      # dentro del contenedor), por eso apunta al puerto mapeado en el host
+      # y no a "http://backend:8000".
+      VITE_API_URL: http://localhost:8000
+      CHOKIDAR_USEPOLLING: "true"
     depends_on:
       - backend
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
 
 volumes:
-  postgres_data:
+  barberflow_db_data:
+  backend_venv:
+  frontend_node_modules:
