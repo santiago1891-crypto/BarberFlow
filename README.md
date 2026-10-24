@@ -6,7 +6,12 @@
   <a href="https://vite.dev/" target="_blank" rel="noopener noreferrer"><img src="https://img.shields.io/badge/Vite-5-646CFF?style=for-the-badge&logo=vite&logoColor=white" alt="Vite" /></a>
   <a href="https://tailwindcss.com/docs" target="_blank" rel="noopener noreferrer"><img src="https://img.shields.io/badge/Tailwind_CSS-3-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white" alt="Tailwind CSS" /></a>
   <a href="https://www.postgresql.org/docs/" target="_blank" rel="noopener noreferrer"><img src="https://img.shields.io/badge/PostgreSQL-compatible-4169E1?style=for-the-badge&logo=postgresql&logoColor=white" alt="PostgreSQL" /></a>
+  <a href="https://www.docker.com/" target="_blank" rel="noopener noreferrer"><img src="https://img.shields.io/badge/Docker-blue?style=for-the-badge&logo=docker&logoColor=white" alt="Docker" /></a>
 </p>
+
+
+
+
 Sistema de gestión para barberías: organiza el equipo, los turnos, los servicios realizados, los pagos y los reportes desde una sola aplicación.
 
 ## Funcionalidades
