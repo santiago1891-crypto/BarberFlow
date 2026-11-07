@@ -14,6 +14,22 @@ export function formatDate(value) {
   return d.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
+/**
+ * Fecha "YYYY-MM-DD" (columna `fecha`, sin hora) -> "dd/mm/aaaa".
+ * No usar formatDate con esto: new Date("2026-11-07") se interpreta como
+ * UTC y en Argentina (UTC-3) mostraba el día anterior.
+ */
+export function formatDateOnly(value) {
+  if (!value) return "—";
+  const [y, m, d] = String(value).split("-").map(Number);
+  if (!y || !m || !d) return formatDate(value);
+  return new Date(y, m - 1, d).toLocaleDateString("es-AR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+}
+
 export function formatTime(value) {
   if (!value) return "—";
   const d = new Date(value);

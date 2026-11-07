@@ -1,4 +1,6 @@
-from sqlalchemy import Date, cast, func, select, text
+from datetime import date
+
+from sqlalchemy import Date, cast, func, literal, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.barbero import Barbero
@@ -29,15 +31,25 @@ async def get_comisiones_mes_actual(db: AsyncSession) -> list[ComisionesMesActua
     return [ComisionesMesActualItem.model_validate(row) for row in result.mappings().all()]
 
 
-def _es_hoy():
-    """Condición reutilizable: fecha_hora del servicio cae en el día de hoy (según el servidor de Postgres)."""
-    return cast(ServicioRealizado.fecha_hora, Date) == func.current_date()
+def _es_fecha(fecha: date | None = None):
+    """Condición reutilizable: servicio del día `fecha` (o de hoy si es None).
 
-
-async def get_ganancias_barberos_hoy(db: AsyncSession) -> list[GananciaBarberoHoyItem]:
+    "Hoy" lo decide Postgres (func.current_date()), la misma referencia que
+    usan el resto de los reportes, para que la fecha no se desfase según la
+    zona horaria de la app.
     """
-    Para cada barbero con al menos un servicio hoy: cuántos cortes hizo,
-    cuánto facturaron en total esos cortes, y cuánto se lleva ÉL de comisión.
+    if fecha is None:
+        return cast(ServicioRealizado.fecha_hora, Date) == func.current_date()
+    return cast(ServicioRealizado.fecha_hora, Date) == fecha
+
+
+async def get_ganancias_barberos_fecha(
+    db: AsyncSession, fecha: date | None = None
+) -> list[GananciaBarberoHoyItem]:
+    """
+    Para cada barbero con al menos un servicio en el día: cuántos cortes
+    hizo, cuánto facturaron en total esos cortes, y cuánto se lleva ÉL de
+    comisión. Con `fecha=None` es "hoy".
     """
     stmt = (
         select(
@@ -48,7 +60,7 @@ async def get_ganancias_barberos_hoy(db: AsyncSession) -> list[GananciaBarberoHo
             func.coalesce(func.sum(ServicioRealizado.comision_monto), 0).label("total_comision_barbero"),
         )
         .join(ServicioRealizado, ServicioRealizado.barbero_id == Barbero.id)
-        .where(_es_hoy())
+        .where(_es_fecha(fecha))
         .group_by(Barbero.id, Barbero.nombre, Barbero.apellido)
         .order_by(Barbero.apellido, Barbero.nombre)
     )
@@ -56,20 +68,31 @@ async def get_ganancias_barberos_hoy(db: AsyncSession) -> list[GananciaBarberoHo
     return [GananciaBarberoHoyItem.model_validate(row) for row in result.mappings().all()]
 
 
-async def get_ganancia_barberia_hoy(db: AsyncSession) -> GananciaBarberiaHoyResumen:
+async def get_ganancias_barberos_hoy(db: AsyncSession) -> list[GananciaBarberoHoyItem]:
+    """Lo que se lleva cada barbero hoy (ver get_ganancias_barberos_fecha)."""
+    return await get_ganancias_barberos_fecha(db)
+
+
+async def get_ganancia_barberia_fecha(
+    db: AsyncSession, fecha: date | None = None
+) -> GananciaBarberiaHoyResumen:
     """
-    Total del negocio hoy: suma de TODOS los cortes de TODOS los barberos,
-    menos lo que se pagó en comisiones. Lo que sobra es lo que se queda la barbería.
+    Total del negocio en el día: suma de TODOS los cortes de TODOS los
+    barberos, menos lo que se pagó en comisiones. Lo que sobra es lo que se
+    queda la barbería. Con `fecha=None` es "hoy".
     """
+    # La fecha la calcula Postgres cuando es hoy, la misma base que filtra
+    # por "hoy": así el día informado nunca puede diferir del día realmente
+    # sumado (date.today() usa la zona horaria de la app y se desfasaba).
+    fecha_sel = (
+        func.current_date().label("fecha") if fecha is None else literal(fecha, type_=Date).label("fecha")
+    )
     stmt = select(
         func.count(ServicioRealizado.id).label("cantidad_servicios"),
         func.coalesce(func.sum(ServicioRealizado.precio_cobrado), 0).label("total_facturado"),
         func.coalesce(func.sum(ServicioRealizado.comision_monto), 0).label("total_comisiones_pagadas"),
-        # La fecha la calcula Postgres, la misma base que filtra por "hoy":
-        # así el día informado nunca puede diferir del día realmente sumado
-        # (date.today() usa la zona horaria de la app y se desfasaba).
-        func.current_date().label("fecha"),
-    ).where(_es_hoy())
+        fecha_sel,
+    ).where(_es_fecha(fecha))
 
     result = await db.execute(stmt)
     row = result.mappings().one()
@@ -84,3 +107,8 @@ async def get_ganancia_barberia_hoy(db: AsyncSession) -> GananciaBarberiaHoyResu
         total_comisiones_pagadas=total_comisiones_pagadas,
         ganancia_barberia=total_facturado - total_comisiones_pagadas,
     )
+
+
+async def get_ganancia_barberia_hoy(db: AsyncSession) -> GananciaBarberiaHoyResumen:
+    """Total del negocio hoy (ver get_ganancia_barberia_fecha)."""
+    return await get_ganancia_barberia_fecha(db)

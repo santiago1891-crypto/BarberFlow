@@ -1,36 +1,35 @@
 import { useEffect, useState, useMemo, useRef } from "react";
-import { DollarSign, Users, Scissors, TrendingUp, Pencil } from "lucide-react";
-import { barberosApi, reportesApi } from "../../../lib/resources.js";
-import { formatMoney, initials } from "../../../lib/format.js";
+import { DollarSign, Users, Scissors, TrendingUp, Pencil, CheckCheck } from "lucide-react";
+import { barberosApi, reportesApi, cierresCajaApi } from "../../../lib/resources.js";
+import { formatMoney, formatTime, initials } from "../../../lib/format.js";
 import { computeBarberStatuses, fullName } from "../../../lib/barberStatus.js";
 import StatCard from "../../ui/StatCard.jsx";
 import Badge from "../../ui/Badge.jsx";
 import { LoadingBlock, EmptyBlock, ErrorBlock } from "../../ui/StateBlocks.jsx";
 
-export default function PanelControl({ onNavigate, search }) {
+export default function PanelControl({ onNavigate, search, tick = 0 }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [resumen, setResumen] = useState(null);
-  const [gananciasBarberos, setGananciasBarberos] = useState([]);
+  // Caja ABIERTA ahora: lo facturado hoy menos lo que ya se cerró. Al
+  // cerrar, esos totales pasan al historial y esta vuelve a $0.
+  const [caja, setCaja] = useState(null);
   const [barberos, setBarberos] = useState([]);
   const [agendaHoy, setAgendaHoy] = useState([]);
 
   // Evita escribir estado después de desmontar (o de un reintento más nuevo).
   const aliveRef = useRef(true);
 
-  async function load() {
-    setLoading(true);
+  async function load({ silencioso = false } = {}) {
+    if (!silencioso) setLoading(true);
     setError("");
     try {
-      const [resumenRes, gananciasRes, barberosRes, agendaRes] = await Promise.all([
-        reportesApi.gananciaBarberiaHoy(),
-        reportesApi.gananciasBarberosHoy(),
+      const [cajaRes, barberosRes, agendaRes] = await Promise.all([
+        cierresCajaApi.actual(),
         barberosApi.list({ limit: 200 }),
         reportesApi.agendaHoy(),
       ]);
       if (!aliveRef.current) return;
-      setResumen(resumenRes);
-      setGananciasBarberos(gananciasRes);
+      setCaja(cajaRes);
       setBarberos(barberosRes);
       setAgendaHoy(agendaRes);
     } catch (err) {
@@ -39,7 +38,7 @@ export default function PanelControl({ onNavigate, search }) {
       // fuera un día sin movimiento.
       setError(err.message || "No se pudo cargar el panel de control.");
     } finally {
-      if (aliveRef.current) setLoading(false);
+      if (aliveRef.current && !silencioso) setLoading(false);
     }
   }
 
@@ -52,11 +51,25 @@ export default function PanelControl({ onNavigate, search }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Cerró (o deshizo) una caja: refrescá los valores sin recargar la vista
+  // entera. El Panel puede estar desmontado (otra vista); al volver a
+  // montar ya pide los datos frescos.
+  const tickRef = useRef(tick);
+  useEffect(() => {
+    if (tickRef.current === tick) return;
+    tickRef.current = tick;
+    load({ silencioso: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tick]);
+
   const statusMap = useMemo(() => computeBarberStatuses(barberos, agendaHoy), [barberos, agendaHoy]);
 
   const topBarberos = useMemo(
-    () => [...gananciasBarberos].sort((a, b) => Number(b.total_facturado) - Number(a.total_facturado)).slice(0, 3),
-    [gananciasBarberos]
+    () =>
+      [...(caja?.por_barbero ?? [])]
+        .sort((a, b) => Number(b.total_facturado) - Number(a.total_facturado))
+        .slice(0, 3),
+    [caja]
   );
 
   const barberosPorId = useMemo(() => new Map(barberos.map((b) => [b.id, b])), [barberos]);
@@ -70,28 +83,48 @@ export default function PanelControl({ onNavigate, search }) {
   if (loading) return <LoadingBlock label="Cargando panel de control…" />;
   if (error) return <ErrorBlock label={error} onRetry={load} />;
 
+  const ultimoCierre = caja?.ultimo_cierre;
+
   return (
     <div className="space-y-6">
-      {/* Stats de hoy */}
+      {/* Ya hubo cierres hoy: aviso + valores de la caja actual (desde el
+          último cierre); el detalle de cada cierre está en Finanzas. */}
+      {ultimoCierre && (
+        <div className="flex items-center gap-2.5 rounded-xl bg-success-soft border border-success/30 px-4 py-3">
+          <CheckCheck size={16} className="text-success shrink-0" />
+          <div>
+            <p className="text-sm font-semibold text-[#F2EDE3]">
+              Último cierre de hoy a las {formatTime(ultimoCierre.cerrado_en)} —{" "}
+              {formatMoney(ultimoCierre.ganancia_barberia)} de ganancia
+            </p>
+            <p className="text-xs text-[#9C9488]">
+              Guardado en el historial. Los valores de abajo son los de la caja actual (desde ese
+              cierre); el historial completo está en Finanzas.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Stats de la caja actual */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <StatCard
           icon={DollarSign}
-          label="Ganancia total hoy"
-          value={formatMoney(resumen?.ganancia_barberia)}
-          sublabel={`Facturado: ${formatMoney(resumen?.total_facturado)}`}
+          label="Ganancia caja actual"
+          value={formatMoney(caja?.ganancia_barberia)}
+          sublabel={`Facturado: ${formatMoney(caja?.total_facturado)}`}
           accent="primary"
         />
         <StatCard
           icon={Scissors}
-          label="Servicios hoy"
-          value={resumen?.cantidad_servicios ?? 0}
+          label="Servicios caja actual"
+          value={caja?.cantidad_servicios ?? 0}
           sublabel="Cortes y servicios realizados"
           accent="secondary"
         />
         <StatCard
           icon={TrendingUp}
-          label="Comisiones pagadas hoy"
-          value={formatMoney(resumen?.total_comisiones_pagadas)}
+          label="Comisiones caja actual"
+          value={formatMoney(caja?.total_comisiones_pagadas)}
           sublabel="A los barberos, sobre lo facturado"
           accent="success"
         />
@@ -110,7 +143,7 @@ export default function PanelControl({ onNavigate, search }) {
         </div>
 
         {topBarberos.length === 0 ? (
-          <EmptyBlock label="Todavía no hay servicios registrados hoy." />
+          <EmptyBlock label="Todavía no hay servicios en esta caja." />
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {topBarberos.map((g) => {
@@ -126,7 +159,11 @@ export default function PanelControl({ onNavigate, search }) {
                     </div>
                     <div className="min-w-0">
                       <p className="text-sm text-[#F2EDE3] truncate">{g.barbero}</p>
-                      {status && <Badge variant={status.variant} pulse={status.pulse}>{status.label}</Badge>}
+                      {status && (
+                        <Badge variant={status.variant} pulse={status.pulse}>
+                          {status.label}
+                        </Badge>
+                      )}
                     </div>
                   </div>
                   <div className="flex items-center justify-between text-xs">

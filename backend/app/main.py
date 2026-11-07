@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.api.deps import get_current_admin
-from app.api.routers import auth, barberos, pagos, reportes, servicios_realizados, tipos_servicio, turnos
+from app.api.routers import auth, barberos, cierres_caja, pagos, reportes, servicios_realizados, tipos_servicio, turnos
 from app.core.config import settings
 from app.crud.base import ReglaDeNegocioError
 
@@ -46,6 +46,7 @@ app.include_router(turnos.router, dependencies=protegido)
 app.include_router(servicios_realizados.router, dependencies=protegido)
 app.include_router(pagos.router, dependencies=protegido)
 app.include_router(reportes.router, dependencies=protegido)
+app.include_router(cierres_caja.router, dependencies=protegido)
 
 
 @app.get("/", tags=["Health"])

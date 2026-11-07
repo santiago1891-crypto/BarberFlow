@@ -52,6 +52,17 @@ export const reportesApi = {
   gananciaBarberiaHoy: () => request(`/reportes/ganancia-barberia-hoy`),
 };
 
+// Cierres de caja: el estado vive en el backend, no en el navegador.
+// Cerrar guarda los totales de la caja que estaba abierta (el período) y
+// deja una caja nueva en $0; `actual` es esa caja abierta (hoy − lo ya
+// cerrado). Los totales los calcula el servidor: `cerrar` no manda nada.
+export const cierresCajaApi = {
+  actual: () => request(`/cierres-caja/actual`),
+  list: (params = {}) => request(`/cierres-caja/${qs(params)}`),
+  cerrar: (body = {}) => request(`/cierres-caja/`, { method: "POST", body: json(body) }),
+  deshacer: () => request(`/cierres-caja/ultimo-hoy`, { method: "DELETE" }),
+};
+
 export async function fetchAllPages(listFn, params = {}, { pageSize = 200, maxPages = 10 } = {}) {
   const todos = [];
   for (let page = 0; page < maxPages; page += 1) {

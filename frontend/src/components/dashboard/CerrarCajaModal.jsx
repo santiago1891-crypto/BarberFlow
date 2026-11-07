@@ -1,101 +1,121 @@
 import { useEffect, useState } from "react";
-import { AlertTriangle, CheckCheck, Lock, RotateCcw } from "lucide-react";
-import { reportesApi } from "../../lib/resources.js";
+import { AlertTriangle, CheckCheck, Info, Lock, RotateCcw } from "lucide-react";
+import { cierresCajaApi } from "../../lib/resources.js";
 import { formatMoney, formatTime, formatDateTime } from "../../lib/format.js";
-import { getCierreDeHoy, guardarCierre, limpiarCierre } from "../../lib/cierreCaja.js";
 import { toast } from "../../lib/toast.js";
 import Modal from "../ui/Modal.jsx";
 import { LoadingBlock, ErrorBlock } from "../ui/StateBlocks.jsx";
 
-
+/**
+ * Cierre de caja.
+ *
+ * Flujo: resumen de la caja actual -> confirmación -> caja cerrada. Al
+ * confirmar, el BACKEND guarda los totales de ESA caja en el historial
+ * (una fila por cierre en `cierres_caja`) y deja una caja nueva en $0 para
+ * seguir vendiendo. `onCambioCierre` avisa afuera para que el Panel de
+ * Control refresque los valores de la caja actual.
+ *
+ * Si ya hubo cierres hoy, se ofrece "Deshacer último cierre": devuelve
+ * esos totales a la caja actual (borra la fila y vuelve a $0 si era el
+ * único cierre de hoy).
+ */
 export default function CerrarCajaModal({ open, onClose, onCambioCierre }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [resumen, setResumen] = useState(null);
-  const [porBarbero, setPorBarbero] = useState([]);
-  const [cierre, setCierre] = useState(null);
+  const [caja, setCaja] = useState(null); // CajaActual: la caja que está abierta
+  const [cierre, setCierre] = useState(null); // CierreCajaRead recién guardado
   const [paso, setPaso] = useState("resumen"); // resumen | confirmar | cerrada
+  // Mientras corre el request de cerrar/deshacer no se puede repetir la acción
+  const [guardando, setGuardando] = useState(false);
 
-  async function load() {
-    setLoading(true);
+  async function load({ silencioso = false } = {}) {
+    if (!silencioso) setLoading(true);
     setError("");
     try {
-      const [resumenRes, barberosRes] = await Promise.all([
-        reportesApi.gananciaBarberiaHoy(),
-        reportesApi.gananciasBarberosHoy(),
-      ]);
-      setResumen(resumenRes);
-      setPorBarbero(
-        [...barberosRes].sort((a, b) => Number(b.total_facturado) - Number(a.total_facturado))
-      );
+      setCaja(await cierresCajaApi.actual());
     } catch (err) {
-      setError(err.message || "No se pudo cargar el resumen del día.");
+      // En una refetch silenciosa no se tapa la pantalla de confirmación
+      // con un error: solo molesta si no hay nada cargado para mostrar.
+      if (!silencioso || !caja) {
+        setError(err.message || "No se pudo cargar la caja actual.");
+      }
     } finally {
-      setLoading(false);
+      if (!silencioso) setLoading(false);
     }
   }
 
   useEffect(() => {
     if (!open) return;
-    setCierre(getCierreDeHoy());
+    // Siempre arranca en "resumen": la caja nunca queda cerrada (cerrar
+    // abre otra nueva en $0), así que no hay estado "cerrada" heredado.
+    setCierre(null);
     setPaso("resumen");
+    setGuardando(false);
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  function notificar(nuevoCierre) {
-    setCierre(nuevoCierre);
-    onCambioCierre?.(nuevoCierre);
+  // Cierra el modal solo si no hay una acción en curso (misma regla que
+  // ConfirmDialog: si no, se pierde el estado del request).
+  function handleRequestClose() {
+    if (!guardando) onClose?.();
   }
 
-  function handleCerrar() {
-    let guardado;
+  async function handleCerrar() {
+    if (guardando) return;
+    setGuardando(true);
     try {
-      guardado = guardarCierre(resumen);
-    } catch {
-      toast.error("No se pudo guardar el cierre en este navegador.");
-      return;
+      // El backend recalcula y guarda los totales de ESTA caja: lo que
+      // queda registrado es lo del servidor, no lo que traía el modal.
+      const guardado = await cierresCajaApi.cerrar();
+      setCierre(guardado);
+      setPaso("cerrada");
+      toast.success(
+        `Caja cerrada: ${formatMoney(guardado.total_facturado)} en ${guardado.cantidad_servicios} servicio${
+          guardado.cantidad_servicios === 1 ? "" : "s"
+        }. Se abrió una caja nueva en $0.`
+      );
+      onCambioCierre?.();
+      // Refresca la caja actual (ahora es la nueva, en $0) sin tapar la
+      // pantalla de confirmación con el spinner.
+      load({ silencioso: true });
+    } catch (err) {
+      toast.error(err.message || "No se pudo cerrar la caja.");
+    } finally {
+      setGuardando(false);
     }
-    setPaso("cerrada");
-    toast.success(
-      `Caja cerrada: ${formatMoney(guardado.total_facturado)} en ${guardado.cantidad_servicios} servicio${
-        guardado.cantidad_servicios === 1 ? "" : "s"
-      }.`
-    );
-    notificar(guardado);
   }
 
-  function handleReabrir() {
-    limpiarCierre();
-    notificar(null);
-    setPaso("resumen");
-    toast.info("Caja reabierta: ya podés seguir registrando ventas y cerrarla más tarde.");
-    load();
+  async function handleDeshacer() {
+    if (guardando) return;
+    setGuardando(true);
+    try {
+      await cierresCajaApi.deshacer();
+      setCierre(null);
+      setPaso("resumen");
+      onCambioCierre?.();
+      await load();
+      toast.info("Último cierre deshecho: sus totales vuelven a la caja actual.");
+    } catch (err) {
+      toast.error(err.message || "No se pudo deshacer el último cierre.");
+    } finally {
+      setGuardando(false);
+    }
   }
 
-  function handleListo() {
-    onClose?.();
-  }
-
-  const cerrada = !!cierre;
-  const horaCierre = cierre ? formatTime(cierre.cerrado_en) : "";
-
-  const footerCerrada = (
-    <>
-      <button
-        onClick={handleReabrir}
-        className="text-sm px-4 py-2 rounded-lg border border-tertiary text-[#9C9488] hover:text-[#F2EDE3] hover:border-primary/30 transition-colors flex items-center gap-2"
-      >
-        <RotateCcw size={14} />
-        Reabrir caja
-      </button>
-      <button
-        onClick={handleListo}
-        className="text-sm px-4 py-2 rounded-lg font-semibold bg-primary text-neutral hover:bg-primary-dark transition-colors"
-      >
-        Listo
-      </button>
-    </>
+  const porBarbero = [...(caja?.por_barbero ?? [])].sort(
+    (a, b) => Number(b.total_facturado) - Number(a.total_facturado)
   );
+  // Caja sin ventas: no hay nada que guardar en el historial (el backend
+  // también lo rechaza con 409).
+  const cajaVacia = !!caja && caja.cantidad_servicios === 0 && Number(caja.total_facturado) === 0;
+  const ultimo = caja?.ultimo_cierre;
+  const hayParaDeshacer = !!cierre || !!ultimo;
+
+  const btnSecundario =
+    "text-sm px-4 py-2 rounded-lg border border-tertiary text-[#9C9488] hover:text-[#F2EDE3] hover:border-primary/30 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed";
+  const btnPrimario =
+    "text-sm px-4 py-2 rounded-lg font-semibold bg-primary text-neutral hover:bg-primary-dark transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed";
 
   let footer;
   if (paso === "confirmar") {
@@ -103,34 +123,54 @@ export default function CerrarCajaModal({ open, onClose, onCambioCierre }) {
       <>
         <button
           onClick={() => setPaso("resumen")}
-          className="text-sm px-4 py-2 rounded-lg border border-tertiary text-[#9C9488] hover:text-[#F2EDE3] hover:border-primary/30 transition-colors"
+          disabled={guardando}
+          className={btnSecundario}
         >
           Volver
         </button>
         <button
           onClick={handleCerrar}
-          className="text-sm px-4 py-2 rounded-lg font-semibold bg-primary text-neutral hover:bg-primary-dark transition-colors flex items-center gap-2"
+          disabled={guardando}
+          aria-busy={guardando}
+          className={btnPrimario}
         >
           <Lock size={14} />
-          Sí, cerrar caja
+          {guardando ? "Cerrando…" : "Sí, cerrar caja"}
         </button>
       </>
     );
-  } else if (paso === "cerrada" || cerrada) {
-    footer = footerCerrada;
+  } else if (paso === "cerrada" && cierre) {
+    footer = (
+      <>
+        {hayParaDeshacer && (
+          <button
+            onClick={handleDeshacer}
+            disabled={guardando}
+            className={btnSecundario}
+          >
+            <RotateCcw size={14} />
+            Deshacer último cierre
+          </button>
+        )}
+        <button
+          onClick={() => onClose?.()}
+          disabled={guardando}
+          className={btnPrimario}
+        >
+          Listo
+        </button>
+      </>
+    );
   } else {
     footer = (
       <>
-        <button
-          onClick={onClose}
-          className="text-sm px-4 py-2 rounded-lg border border-tertiary text-[#9C9488] hover:text-[#F2EDE3] hover:border-primary/30 transition-colors"
-        >
+        <button onClick={() => onClose?.()} disabled={guardando} className={btnSecundario}>
           Cancelar
         </button>
         <button
           onClick={() => setPaso("confirmar")}
-          disabled={loading || !!error || !resumen}
-          className="text-sm px-4 py-2 rounded-lg font-semibold bg-primary text-neutral hover:bg-primary-dark transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          disabled={loading || !!error || !caja || cajaVacia || guardando}
+          className={btnPrimario}
         >
           <Lock size={14} />
           Cerrar caja
@@ -142,14 +182,20 @@ export default function CerrarCajaModal({ open, onClose, onCambioCierre }) {
   return (
     <Modal
       open={open}
-      onClose={onClose}
+      onClose={handleRequestClose}
       title="Cerrar caja"
-      subtitle={cerrada && paso !== "resumen" ? "Cierre del día registrado" : "Resumen del día antes de cerrar"}
+      subtitle={
+        paso === "cerrada"
+          ? "Cierre guardado en el historial"
+          : paso === "confirmar"
+            ? "Confirmar cierre"
+            : "Resumen de la caja actual antes de cerrar"
+      }
       maxWidth="max-w-lg"
       footer={footer}
     >
       {loading ? (
-        <LoadingBlock label="Calculando el cierre del día…" />
+        <LoadingBlock label="Cargando la caja actual…" />
       ) : error ? (
         <ErrorBlock label={error} onRetry={load} />
       ) : paso === "cerrada" && cierre ? (
@@ -181,8 +227,9 @@ export default function CerrarCajaModal({ open, onClose, onCambioCierre }) {
             </div>
           </div>
 
-          <p className="text-xs text-[#6b6459] mt-3">
-            Si seguís vendiendo, reabrí la caja para que esas ventas entren al resumen del día.
+          <p className="text-xs text-[#9C9488] mt-3 leading-relaxed">
+            Estos valores quedaron guardados en el historial (Finanzas) y se abrió una caja nueva en
+            $0: ya podés seguir vendiendo y cerrarla cuando quieras.
           </p>
         </div>
       ) : (
@@ -191,49 +238,70 @@ export default function CerrarCajaModal({ open, onClose, onCambioCierre }) {
             <div className="flex items-start gap-3 rounded-xl bg-warning-soft border border-warning/30 p-4">
               <AlertTriangle size={17} className="text-warning shrink-0 mt-0.5" />
               <div>
-                <p className="text-sm font-semibold text-[#F2EDE3]">Vas a cerrar la caja de hoy</p>
+                <p className="text-sm font-semibold text-[#F2EDE3]">Vas a cerrar esta caja</p>
                 <p className="text-xs text-[#9C9488] leading-relaxed mt-1">
-                  Quedaría cerrada a las {formatTime(new Date())} con{" "}
-                  {formatMoney(resumen?.total_facturado)} facturados en{" "}
-                  {resumen?.cantidad_servicios ?? 0} servicio
-                  {resumen?.cantidad_servicios === 1 ? "" : "s"}. Las ventas que registres después no van a
-                  entrar en este cierre, y hasta que la reabras el Topbar va a mostrar "Caja cerrada".
+                  Los {formatMoney(caja?.total_facturado)} facturados en{" "}
+                  {caja?.cantidad_servicios ?? 0} servicio
+                  {caja?.cantidad_servicios === 1 ? "" : "s"} se guardan en el historial de ganancias
+                  y se abre una caja nueva en $0. Las ventas que registres después entran en la caja
+                  nueva.
                 </p>
               </div>
             </div>
           ) : (
-            cerrada && (
-              <div className="flex items-center gap-2.5 rounded-lg bg-success-soft border border-success/30 px-3.5 py-3">
-                <CheckCheck size={16} className="text-success shrink-0" />
-                <div>
-                  <p className="text-sm font-semibold text-[#F2EDE3]">Caja cerrada a las {horaCierre}</p>
-                  <p className="text-xs text-[#9C9488]">
-                    Cerraste con {formatMoney(cierre.total_facturado)} facturados.
+            <>
+              {cajaVacia && (
+                <div className="flex items-start gap-2.5 rounded-lg bg-inputbg border border-tertiary px-3.5 py-3">
+                  <Info size={16} className="text-[#6b6459] shrink-0 mt-0.5" />
+                  <p className="text-sm text-[#9C9488]">
+                    Esta caja todavía no tiene ventas: no hay nada que cerrar.
                   </p>
                 </div>
-              </div>
-            )
+              )}
+              {ultimo && (
+                <div className="flex items-center gap-2.5 rounded-lg bg-success-soft border border-success/30 px-3.5 py-3">
+                  <CheckCheck size={16} className="text-success shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-[#F2EDE3]">
+                      Último cierre de hoy: {formatTime(ultimo.cerrado_en)}
+                    </p>
+                    <p className="text-xs text-[#9C9488]">
+                      {formatMoney(ultimo.ganancia_barberia)} de ganancia guardados en el historial.
+                      Los valores de abajo son los de la caja nueva (desde ese cierre).
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleDeshacer}
+                    disabled={guardando}
+                    title="Devolver ese cierre a la caja actual"
+                    className="shrink-0 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-success/40 text-success hover:bg-success/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Deshacer
+                  </button>
+                </div>
+              )}
+            </>
           )}
 
           <div className="grid grid-cols-3 gap-3">
             <div className="rounded-xl bg-inputbg border border-tertiary p-3">
               <p className="font-mono text-[9px] uppercase tracking-wide text-[#6b6459] mb-1">Facturado</p>
-              <p className="text-primary font-display text-lg">{formatMoney(resumen?.total_facturado)}</p>
+              <p className="text-primary font-display text-lg">{formatMoney(caja?.total_facturado)}</p>
             </div>
             <div className="rounded-xl bg-inputbg border border-tertiary p-3">
               <p className="font-mono text-[9px] uppercase tracking-wide text-[#6b6459] mb-1">Servicios</p>
-              <p className="text-[#F2EDE3] font-display text-lg">{resumen?.cantidad_servicios ?? 0}</p>
+              <p className="text-[#F2EDE3] font-display text-lg">{caja?.cantidad_servicios ?? 0}</p>
             </div>
             <div className="rounded-xl bg-inputbg border border-tertiary p-3">
               <p className="font-mono text-[9px] uppercase tracking-wide text-[#6b6459] mb-1">Ganancia</p>
-              <p className="text-success font-display text-lg">{formatMoney(resumen?.ganancia_barberia)}</p>
+              <p className="text-success font-display text-lg">{formatMoney(caja?.ganancia_barberia)}</p>
             </div>
           </div>
 
           <div className="flex items-center justify-between rounded-lg bg-inputbg border border-tertiary px-3.5 py-2.5 text-sm">
-            <span className="text-[#9C9488]">Comisiones del día</span>
+            <span className="text-[#9C9488]">Comisiones de la caja</span>
             <span className="text-[#F2EDE3] font-semibold">
-              {formatMoney(resumen?.total_comisiones_pagadas)}
+              {formatMoney(caja?.total_comisiones_pagadas)}
             </span>
           </div>
 
@@ -242,7 +310,7 @@ export default function CerrarCajaModal({ open, onClose, onCambioCierre }) {
             {porBarbero.length === 0 ? (
               <div className="flex items-center gap-2.5 rounded-lg bg-inputbg border border-tertiary px-3.5 py-3 text-sm text-[#9C9488]">
                 <CheckCheck size={16} className="text-[#6b6459] shrink-0" />
-                Todavía no se registró ningún servicio hoy.
+                Todavía no se registró ningún servicio en esta caja.
               </div>
             ) : (
               <div className="space-y-1.5">

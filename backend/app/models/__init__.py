@@ -1,5 +1,6 @@
 from app.db.base import Base
 from app.models.barbero import Barbero
+from app.models.cierre_caja import CierreCaja
 from app.models.pago import Pago
 from app.models.servicio_realizado import ServicioRealizado
 from app.models.tipo_servicio import TipoServicio
@@ -12,4 +13,5 @@ __all__ = [
     "Turno",
     "ServicioRealizado",
     "Pago",
+    "CierreCaja",
 ]

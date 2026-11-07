@@ -10,7 +10,6 @@ import Personal from "./views/Personal.jsx";
 import HistorialVentas from "./views/HistorialVentas.jsx";
 import Finanzas from "./views/Finanzas.jsx";
 import { reportesApi } from "../../lib/resources.js";
-import { getCierreDeHoy } from "../../lib/cierreCaja.js";
 
 const TITLES = {
   panel: "Panel de Control",
@@ -37,9 +36,10 @@ export default function DashboardLayout({ username, onLogout }) {
   const [search, setSearch] = useState("");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [cerrarCajaOpen, setCerrarCajaOpen] = useState(false);
-  // Si la caja de hoy ya se cerró (ver lib/cierreCaja.js), el Topbar lo
-  // muestra y el modal arranca en el estado "cerrada".
-  const [cierreHoy, setCierreHoy] = useState(() => getCierreDeHoy());
+  // Se incrementa cada vez que cambia el estado de la caja (cerrar o
+  // deshacer un cierre): le avisa al Panel de Control que refresque los
+  // valores de la caja actual. El estado real vive en el backend.
+  const [cierreTick, setCierreTick] = useState(0);
   const [pendingCount, setPendingCount] = useState(0);
   const citasRef = useRef(null);
   const serviciosRef = useRef(null);
@@ -122,14 +122,13 @@ export default function DashboardLayout({ username, onLogout }) {
           onLogout={onLogout}
           onOpenMobileNav={() => setMobileNavOpen(true)}
           onOpenCerrarCaja={() => setCerrarCajaOpen(true)}
-          cajaCerrada={!!cierreHoy}
           pageTitle={TITLES[view]}
         />
 
         <main className="flex-1 p-4 md:p-6 max-w-[1400px] w-full mx-auto">
           <h1 className="md:hidden font-display text-xl text-[#F2EDE3] mb-4">{TITLES[view]}</h1>
 
-          {view === "panel" && <PanelControl onNavigate={navigate} search={search} />}
+          {view === "panel" && <PanelControl onNavigate={navigate} search={search} tick={cierreTick} />}
           {view === "citas" && <Citas ref={citasRef} search={search} />}
           {view === "servicios" && <Servicios ref={serviciosRef} search={search} />}
           {view === "personal" && <Personal search={search} />}
@@ -143,7 +142,7 @@ export default function DashboardLayout({ username, onLogout }) {
       <CerrarCajaModal
         open={cerrarCajaOpen}
         onClose={() => setCerrarCajaOpen(false)}
-        onCierreChange={setCierreHoy}
+        onCambioCierre={() => setCierreTick((t) => t + 1)}
       />
     </div>
   );
