@@ -1,7 +1,4 @@
-// Capa de autenticación de BarberFlow, conectada al backend FastAPI
-// (barberia-crud). El login del admin usa el flujo estándar de OAuth2
-// Password Flow: form-urlencoded con "username" y "password", que devuelve
-// un JWT.
+
 
 import { API_URL, setToken, getToken, onUnauthorized } from "./api.js";
 
@@ -11,8 +8,11 @@ export { onUnauthorized };
  * Inicia sesión contra POST /auth/login.
  * Lanza un Error con `code` "invalid_credentials" o "network_error" para
  * que la UI pueda mostrar un mensaje apropiado en cada caso.
+ *
+ * @param remember false = el token solo vive en la pestaña actual
+ *                 (checkbox "Recordarme" sin marcar).
  */
-export async function login(username, password) {
+export async function login(username, password, { remember = true } = {}) {
   const body = new URLSearchParams();
   body.set("username", username);
   body.set("password", password);
@@ -37,12 +37,11 @@ export async function login(username, password) {
   }
 
   const data = await res.json(); // { access_token, token_type }
-  setToken(data.access_token);
+  setToken(data.access_token, remember);
 
   return { username };
 }
 
-/** Restaura la sesión desde el token guardado (por ejemplo, al recargar). */
 export function getStoredSession() {
   const token = getToken();
   if (!token) return null;

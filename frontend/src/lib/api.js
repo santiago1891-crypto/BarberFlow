@@ -1,11 +1,3 @@
-// Cliente HTTP central de BarberFlow.
-//
-// - Resuelve la URL base desde VITE_API_URL (definida en .env).
-// - Guarda el JWT en memoria + localStorage para persistir la sesión al
-//   refrescar la página.
-// - Expone `apiFetch`, que ya adjunta el header Authorization.
-// - Si el backend responde 401 (token vencido/ inválido), limpia la sesión
-//   y avisa a quien esté suscripto (App.jsx) para volver al login.
 
 export const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
@@ -17,20 +9,30 @@ export function onUnauthorized(handler) {
 }
 
 export function getToken() {
-  return localStorage.getItem(TOKEN_KEY);
-}
 
-export function setToken(token) {
-  if (token) {
-    localStorage.setItem(TOKEN_KEY, token);
-  } else {
-    localStorage.removeItem(TOKEN_KEY);
-  }
+  return localStorage.getItem(TOKEN_KEY) ?? sessionStorage.getItem(TOKEN_KEY);
 }
 
 /**
- * Wrapper de fetch que apunta a la API y adjunta el JWT guardado.
+ * Guarda (o limpia) el JWT.
+ *
+ * @param token   token a guardar, o null para cerrar sesión.
+ * @param persist true = localStorage (persiste al recargar, "recordarme"),
+ *                false = sessionStorage (se borra al cerrar la pestaña).
  */
+export function setToken(token, persist = true) {
+  if (!token) {
+    localStorage.removeItem(TOKEN_KEY);
+    sessionStorage.removeItem(TOKEN_KEY);
+    return;
+  }
+  const destino = persist ? localStorage : sessionStorage;
+  const otro = persist ? sessionStorage : localStorage;
+  otro.removeItem(TOKEN_KEY);
+  destino.setItem(TOKEN_KEY, token);
+}
+
+
 export async function apiFetch(path, options = {}) {
   const token = getToken();
 
@@ -51,7 +53,6 @@ export async function apiFetch(path, options = {}) {
   return res;
 }
 
-/** Convierte un objeto de params en query string, saltando undefined/null/"". */
 export function qs(params = {}) {
   const usp = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
@@ -62,11 +63,7 @@ export function qs(params = {}) {
   return str ? `?${str}` : "";
 }
 
-/**
- * fetch + parseo de JSON + manejo de errores homogéneo.
- * Lanza un Error con el detalle que devuelve FastAPI (`detail`) cuando la
- * respuesta no es 2xx, para que la UI pueda mostrarlo directo.
- */
+
 export async function request(path, options = {}) {
   let res;
   try {

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Search, Bell, LogOut, Menu, ChevronDown, Lock } from "lucide-react";
+import { Search, Bell, LogOut, Menu, ChevronDown, Lock, CheckCheck } from "lucide-react";
 import { initials } from "../../lib/format.js";
 
 export default function Topbar({
@@ -10,6 +10,7 @@ export default function Topbar({
   onLogout,
   onOpenMobileNav,
   onOpenCerrarCaja,
+  cajaCerrada = false,
   pageTitle,
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -54,10 +55,15 @@ export default function Topbar({
       <div className="flex items-center gap-1.5 shrink-0" ref={menuRef}>
         <button
           onClick={onOpenCerrarCaja}
-          className="hidden sm:flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold bg-primary text-neutral hover:bg-primary-dark transition-colors mr-1"
+          title={cajaCerrada ? "Ver el cierre de caja de hoy" : "Cerrar la caja de hoy"}
+          className={`hidden sm:flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition-colors mr-1 border ${
+            cajaCerrada
+              ? "bg-success-soft text-success border-success/40 hover:bg-success/20"
+              : "bg-primary text-neutral border-transparent hover:bg-primary-dark"
+          }`}
         >
-          <Lock size={13} />
-          Cerrar Caja
+          {cajaCerrada ? <CheckCheck size={13} /> : <Lock size={13} />}
+          {cajaCerrada ? "Caja cerrada" : "Cerrar Caja"}
         </button>
 
         <div className="relative">
@@ -106,8 +112,8 @@ export default function Topbar({
               }}
               className="sm:hidden w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-primary hover:bg-primary-soft transition-colors"
             >
-              <Lock size={15} />
-              Cerrar caja
+              {cajaCerrada ? <CheckCheck size={15} /> : <Lock size={15} />}
+              {cajaCerrada ? "Ver caja cerrada" : "Cerrar caja"}
             </button>
             <button
               onClick={onLogout}

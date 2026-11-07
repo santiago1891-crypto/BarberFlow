@@ -1,5 +1,3 @@
-from datetime import date
-
 from sqlalchemy import Date, cast, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,14 +12,20 @@ from app.schemas.reportes import (
 
 
 async def get_agenda_hoy(db: AsyncSession) -> list[AgendaHoyItem]:
-    """Lee directamente la vista public.v_agenda_hoy (ya ordenada por fecha_hora)."""
-    result = await db.execute(text("SELECT * FROM public.v_agenda_hoy"))
+    """Lee la vista public.v_agenda_hoy.
+
+    El ORDER BY va acá y no solo dentro de la vista: Postgres no garantiza
+    que el orden de una vista se respete en la consulta que la consume.
+    """
+    result = await db.execute(text("SELECT * FROM public.v_agenda_hoy ORDER BY fecha_hora"))
     return [AgendaHoyItem.model_validate(row) for row in result.mappings().all()]
 
 
 async def get_comisiones_mes_actual(db: AsyncSession) -> list[ComisionesMesActualItem]:
-    """Lee directamente la vista public.v_comisiones_mes_actual."""
-    result = await db.execute(text("SELECT * FROM public.v_comisiones_mes_actual"))
+    """Lee la vista public.v_comisiones_mes_actual, del que más gana al que menos."""
+    result = await db.execute(
+        text("SELECT * FROM public.v_comisiones_mes_actual ORDER BY ingreso_total_mes DESC, barbero")
+    )
     return [ComisionesMesActualItem.model_validate(row) for row in result.mappings().all()]
 
 
@@ -61,6 +65,10 @@ async def get_ganancia_barberia_hoy(db: AsyncSession) -> GananciaBarberiaHoyResu
         func.count(ServicioRealizado.id).label("cantidad_servicios"),
         func.coalesce(func.sum(ServicioRealizado.precio_cobrado), 0).label("total_facturado"),
         func.coalesce(func.sum(ServicioRealizado.comision_monto), 0).label("total_comisiones_pagadas"),
+        # La fecha la calcula Postgres, la misma base que filtra por "hoy":
+        # así el día informado nunca puede diferir del día realmente sumado
+        # (date.today() usa la zona horaria de la app y se desfasaba).
+        func.current_date().label("fecha"),
     ).where(_es_hoy())
 
     result = await db.execute(stmt)
@@ -70,7 +78,7 @@ async def get_ganancia_barberia_hoy(db: AsyncSession) -> GananciaBarberiaHoyResu
     total_comisiones_pagadas = row["total_comisiones_pagadas"]
 
     return GananciaBarberiaHoyResumen(
-        fecha=date.today(),
+        fecha=row["fecha"],
         cantidad_servicios=row["cantidad_servicios"],
         total_facturado=total_facturado,
         total_comisiones_pagadas=total_comisiones_pagadas,

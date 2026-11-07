@@ -11,12 +11,18 @@ class PagoBase(BaseModel):
     servicio_realizado_id: uuid.UUID
     metodo: MetodoPago
     monto: Decimal = Field(..., gt=0)
-    estado: EstadoPago = EstadoPago.pendiente
     referencia_externa: str | None = Field(None, max_length=100)
     fecha_pago: datetime | None = None
 
 
 class PagoCreate(PagoBase):
+    """Alta de pago.
+
+    No acepta `estado`: el pago siempre nace "pendiente". Aceptar acá un
+    estado arbitrario permitiría crearlo directamente "reembolsado" (estado
+    terminal), saltándose TRANSICIONES_VALIDAS de app/crud/pago.py.
+    """
+
     pass
 
 
@@ -31,6 +37,7 @@ class PagoUpdate(BaseModel):
 class PagoRead(PagoBase):
     model_config = ConfigDict(from_attributes=True)
 
+    estado: EstadoPago = EstadoPago.pendiente
     id: uuid.UUID
     created_at: datetime
     updated_at: datetime

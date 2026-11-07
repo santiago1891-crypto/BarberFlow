@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState, useImperativeHandle, forwardRef } from "react";
+import { useEffect, useMemo, useState, useImperativeHandle, forwardRef, useRef } from "react";
 import { Plus, Pencil, Trash2, CheckCircle2, PlayCircle, XCircle, CalendarCheck } from "lucide-react";
-import { turnosApi, barberosApi, tiposServicioApi } from "../../../lib/resources.js";
+import { turnosApi, barberosApi, tiposServicioApi, fetchAllPages } from "../../../lib/resources.js";
 import {
   formatDateTime,
   toDateInputValue,
@@ -13,7 +13,7 @@ import Badge from "../../ui/Badge.jsx";
 import Modal from "../../ui/Modal.jsx";
 import ConfirmDialog from "../../ui/ConfirmDialog.jsx";
 import { Field, TextInput, SelectInput, TextArea } from "../../ui/Field.jsx";
-import { LoadingBlock, EmptyBlock } from "../../ui/StateBlocks.jsx";
+import { LoadingBlock, EmptyBlock, ErrorBlock } from "../../ui/StateBlocks.jsx";
 
 const ESTADO_META = {
   pendiente: { label: "Pendiente", variant: "warning" },
@@ -54,6 +54,7 @@ const Citas = forwardRef(function Citas({ search }, ref) {
   const [barberos, setBarberos] = useState([]);
   const [tipos, setTipos] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [rango, setRango] = useState("hoy"); // hoy | todos
   const [estadoFiltro, setEstadoFiltro] = useState("");
 
@@ -62,6 +63,15 @@ const Citas = forwardRef(function Citas({ search }, ref) {
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
+
+  // "Nueva cita" puede llegar antes de que carguen los catálogos (botón del
+  // sidebar): guardamos el pedido y lo abrimos cuando estén listos, en vez
+  // de fallar con "primero cargá un servicio".
+  const [catalogosListos, setCatalogosListos] = useState(false);
+  const [pendienteCrear, setPendienteCrear] = useState(false);
+
+  // Ignora respuestas de cargas viejas (cambios de filtro rápidos).
+  const loadIdRef = useRef(0);
 
   const [confirmAction, setConfirmAction] = useState(null); // { type: 'completar'|'cancelar'|'eliminar', turno }
   const [confirmLoading, setConfirmLoading] = useState(false);
@@ -72,21 +82,27 @@ const Citas = forwardRef(function Citas({ search }, ref) {
 
   async function loadCatalogos() {
     try {
+      // Sin filtrar por activo: así los turnos de barberos o servicios
+      // desactivados muestran su nombre en vez de "—" y se pueden editar.
       const [b, t] = await Promise.all([
-        barberosApi.list({ activo: true, limit: 200 }),
-        tiposServicioApi.list({ activo: true, limit: 200 }),
+        fetchAllPages(barberosApi.list),
+        fetchAllPages(tiposServicioApi.list),
       ]);
       setBarberos(b);
       setTipos(t);
     } catch (err) {
       toast.error(err.message || "No se pudieron cargar barberos/servicios.");
+    } finally {
+      setCatalogosListos(true);
     }
   }
 
   async function loadTurnos() {
+    const loadId = (loadIdRef.current += 1);
     setLoading(true);
+    setError("");
     try {
-      const params = { limit: 200 };
+      const params = {};
       if (rango === "hoy") {
         const now = new Date();
         const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
@@ -95,17 +111,20 @@ const Citas = forwardRef(function Citas({ search }, ref) {
         params.fecha_hasta = end.toISOString();
       }
       if (estadoFiltro) params.estado = estadoFiltro;
-      const data = await turnosApi.list(params);
-      setTurnos(data.sort((a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora)));
+      const data = await fetchAllPages(turnosApi.list, params, { pageSize: 200, maxPages: 10 });
+      if (loadId !== loadIdRef.current) return;
+      setTurnos([...data].sort((a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora)));
     } catch (err) {
-      toast.error(err.message || "No se pudieron cargar los turnos.");
+      if (loadId !== loadIdRef.current) return;
+      setError(err.message || "No se pudieron cargar los turnos.");
     } finally {
-      setLoading(false);
+      if (loadId === loadIdRef.current) setLoading(false);
     }
   }
 
   useEffect(() => {
     loadCatalogos();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -113,8 +132,30 @@ const Citas = forwardRef(function Citas({ search }, ref) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rango, estadoFiltro]);
 
+  useEffect(() => {
+    if (!pendienteCrear || !catalogosListos) return;
+    setPendienteCrear(false);
+    openCreate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendienteCrear, catalogosListos]);
+
   const barberosById = useMemo(() => new Map(barberos.map((b) => [b.id, b])), [barberos]);
   const tiposById = useMemo(() => new Map(tipos.map((t) => [t.id, t])), [tipos]);
+  const barberosActivos = useMemo(() => barberos.filter((b) => b.activo), [barberos]);
+  const tiposActivos = useMemo(() => tipos.filter((t) => t.activo), [tipos]);
+
+  // El formulario ofrece solo los activos, pero si el turno en edición
+  // pertenece a uno desactivado hay que meterlo igual: si no, el <select>
+  // quedaba sin opción elegida y al guardar se mandaba vacío.
+  const barberosSelect = useMemo(() => {
+    const actual = barberos.find((b) => String(b.id) === form.barbero_id);
+    return actual && !actual.activo ? [actual, ...barberosActivos] : barberosActivos;
+  }, [barberos, barberosActivos, form.barbero_id]);
+
+  const tiposSelect = useMemo(() => {
+    const actual = tipos.find((t) => t.id === form.tipo_servicio_id);
+    return actual && !actual.activo ? [actual, ...tiposActivos] : tiposActivos;
+  }, [tipos, tiposActivos, form.tipo_servicio_id]);
 
   const filtered = useMemo(() => {
     const q = (search || "").trim().toLowerCase();
@@ -130,8 +171,17 @@ const Citas = forwardRef(function Citas({ search }, ref) {
   }, [turnos, search, barberosById, tiposById]);
 
   function openCreate() {
-    if (tipos.length === 0) {
+    if (!catalogosListos) {
+      // Cargando catálogos: lo abrimos apenas terminen (ver useEffect).
+      setPendienteCrear(true);
+      return;
+    }
+    if (tiposActivos.length === 0) {
       toast.error('Primero cargá al menos un servicio en "Servicios" — sin eso no se puede agendar.');
+      return;
+    }
+    if (barberosActivos.length === 0) {
+      toast.error('Primero cargá al menos un barbero activo en "Personal" — sin eso no se puede agendar.');
       return;
     }
     setEditing(null);
@@ -279,6 +329,8 @@ const Citas = forwardRef(function Citas({ search }, ref) {
       <div className="rounded-2xl bg-card border border-primary/[0.12] p-5">
         {loading ? (
           <LoadingBlock label="Cargando citas…" />
+        ) : error ? (
+          <ErrorBlock label={error} onRetry={loadTurnos} />
         ) : filtered.length === 0 ? (
           <EmptyBlock label="No hay turnos para este filtro." />
         ) : (
@@ -416,7 +468,7 @@ const Citas = forwardRef(function Citas({ search }, ref) {
                 onChange={(e) => setForm({ ...form, barbero_id: e.target.value })}
               >
                 <option value="">Elegir…</option>
-                {barberos.map((b) => (
+                {barberosSelect.map((b) => (
                   <option key={b.id} value={b.id}>
                     {fullName(b)}
                   </option>
@@ -429,7 +481,7 @@ const Citas = forwardRef(function Citas({ search }, ref) {
                 onChange={(e) => setForm({ ...form, tipo_servicio_id: e.target.value })}
               >
                 <option value="">Elegir…</option>
-                {tipos.map((t) => (
+                {tiposSelect.map((t) => (
                   <option key={t.id} value={t.id}>
                     {t.nombre}
                   </option>

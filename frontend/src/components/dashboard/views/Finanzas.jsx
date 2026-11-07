@@ -2,17 +2,18 @@ import { useEffect, useMemo, useState } from "react";
 import { DollarSign, TrendingUp, Wallet } from "lucide-react";
 import { reportesApi } from "../../../lib/resources.js";
 import { formatMoney } from "../../../lib/format.js";
-import { toast } from "../../../lib/toast.js";
 import StatCard from "../../ui/StatCard.jsx";
-import { LoadingBlock, EmptyBlock } from "../../ui/StateBlocks.jsx";
+import { LoadingBlock, EmptyBlock, ErrorBlock } from "../../ui/StateBlocks.jsx";
 
 export default function Finanzas({ search }) {
   const [resumen, setResumen] = useState(null);
   const [comisiones, setComisiones] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   async function loadAll() {
     setLoading(true);
+    setError("");
     try {
       const [resumenRes, comisionesRes] = await Promise.all([
         reportesApi.gananciaBarberiaHoy(),
@@ -21,7 +22,9 @@ export default function Finanzas({ search }) {
       setResumen(resumenRes);
       setComisiones(comisionesRes);
     } catch (err) {
-      toast.error(err.message || "No se pudo cargar la sección de finanzas.");
+      // Antes el error se tragaba con un toast y la vista seguía mostrando
+      // "$0.00 facturado" y "sin comisiones este mes" como si fueran ciertos.
+      setError(err.message || "No se pudo cargar la sección de finanzas.");
     } finally {
       setLoading(false);
     }
@@ -29,6 +32,7 @@ export default function Finanzas({ search }) {
 
   useEffect(() => {
     loadAll();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const filteredComisiones = useMemo(() => {
@@ -38,6 +42,7 @@ export default function Finanzas({ search }) {
   }, [comisiones, search]);
 
   if (loading) return <LoadingBlock label="Cargando finanzas…" />;
+  if (error) return <ErrorBlock label={error} onRetry={loadAll} />;
 
   return (
     <div className="space-y-6">

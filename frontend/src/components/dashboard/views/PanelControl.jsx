@@ -1,46 +1,55 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { DollarSign, Users, Scissors, TrendingUp, Pencil } from "lucide-react";
 import { barberosApi, reportesApi } from "../../../lib/resources.js";
 import { formatMoney, initials } from "../../../lib/format.js";
 import { computeBarberStatuses, fullName } from "../../../lib/barberStatus.js";
-import { toast } from "../../../lib/toast.js";
 import StatCard from "../../ui/StatCard.jsx";
 import Badge from "../../ui/Badge.jsx";
-import { LoadingBlock, EmptyBlock } from "../../ui/StateBlocks.jsx";
+import { LoadingBlock, EmptyBlock, ErrorBlock } from "../../ui/StateBlocks.jsx";
 
 export default function PanelControl({ onNavigate, search }) {
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [resumen, setResumen] = useState(null);
   const [gananciasBarberos, setGananciasBarberos] = useState([]);
   const [barberos, setBarberos] = useState([]);
   const [agendaHoy, setAgendaHoy] = useState([]);
 
-  useEffect(() => {
-    let alive = true;
-    async function load() {
-      setLoading(true);
-      try {
-        const [resumenRes, gananciasRes, barberosRes, agendaRes] = await Promise.all([
-          reportesApi.gananciaBarberiaHoy(),
-          reportesApi.gananciasBarberosHoy(),
-          barberosApi.list({ limit: 200 }),
-          reportesApi.agendaHoy(),
-        ]);
-        if (!alive) return;
-        setResumen(resumenRes);
-        setGananciasBarberos(gananciasRes);
-        setBarberos(barberosRes);
-        setAgendaHoy(agendaRes);
-      } catch (err) {
-        toast.error(err.message || "No se pudo cargar el panel de control.");
-      } finally {
-        if (alive) setLoading(false);
-      }
+  // Evita escribir estado después de desmontar (o de un reintento más nuevo).
+  const aliveRef = useRef(true);
+
+  async function load() {
+    setLoading(true);
+    setError("");
+    try {
+      const [resumenRes, gananciasRes, barberosRes, agendaRes] = await Promise.all([
+        reportesApi.gananciaBarberiaHoy(),
+        reportesApi.gananciasBarberosHoy(),
+        barberosApi.list({ limit: 200 }),
+        reportesApi.agendaHoy(),
+      ]);
+      if (!aliveRef.current) return;
+      setResumen(resumenRes);
+      setGananciasBarberos(gananciasRes);
+      setBarberos(barberosRes);
+      setAgendaHoy(agendaRes);
+    } catch (err) {
+      if (!aliveRef.current) return;
+      // Sin esto la vista quedaba en $0.00 / "sin servicios hoy" como si
+      // fuera un día sin movimiento.
+      setError(err.message || "No se pudo cargar el panel de control.");
+    } finally {
+      if (aliveRef.current) setLoading(false);
     }
+  }
+
+  useEffect(() => {
+    aliveRef.current = true;
     load();
     return () => {
-      alive = false;
+      aliveRef.current = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const statusMap = useMemo(() => computeBarberStatuses(barberos, agendaHoy), [barberos, agendaHoy]);
@@ -59,6 +68,7 @@ export default function PanelControl({ onNavigate, search }) {
   }, [barberos, search]);
 
   if (loading) return <LoadingBlock label="Cargando panel de control…" />;
+  if (error) return <ErrorBlock label={error} onRetry={load} />;
 
   return (
     <div className="space-y-6">

@@ -10,16 +10,11 @@ function FieldLabel({ children }) {
   );
 }
 
-/**
- * Panel de login. Al autenticar correctamente contra el backend, llama a
- * `onAuthenticated(session)` — quien renderiza este componente (App.jsx) es
- * quien decide navegar al dashboard, no este panel.
- */
 export default function AuthPanel({ onAuthenticated }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [remember, setRemember] = useState(false);
+  const [remember, setRemember] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [shake, setShake] = useState(false);
@@ -46,7 +41,7 @@ export default function AuthPanel({ onAuthenticated }) {
 
     setLoading(true);
     try {
-      const session = await login(username.trim(), password);
+      const session = await login(username.trim(), password, { remember });
       onAuthenticated(session);
     } catch (err) {
       setError(

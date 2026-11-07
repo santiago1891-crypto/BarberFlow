@@ -13,9 +13,6 @@ from app.models.tipo_servicio import TipoServicio
 from app.models.turno import Turno
 from app.schemas.turno import TurnoCompletar, TurnoCreate, TurnoUpdate
 
-# Transiciones válidas del ciclo de vida de un turno.
-# pendiente -> confirmado -> en_curso -> completado
-# cualquier estado no terminal puede cancelarse.
 TRANSICIONES_VALIDAS: dict[EstadoTurno, set[EstadoTurno]] = {
     EstadoTurno.pendiente: {EstadoTurno.confirmado, EstadoTurno.cancelado},
     EstadoTurno.confirmado: {EstadoTurno.en_curso, EstadoTurno.cancelado},
@@ -143,13 +140,24 @@ class CRUDTurno(CRUDBase[Turno, TurnoCreate, TurnoUpdate]):
         barbero = await db.get(Barbero, db_turno.barbero_id)
         tipo_servicio = await db.get(TipoServicio, db_turno.tipo_servicio_id)
 
+        # Comisión del servicio, en orden de prioridad:
+        #   1. la que pidió explícitamente quien completa el turno,
+        #   2. la configurada en el tipo de servicio (la que se muestra en
+        #      "Servicios" y que la UI promete usar al completar),
+        #   3. el porcentaje general del barbero (respaldo).
+        comision_pct = body.comision_pct
+        if comision_pct is None:
+            comision_pct = tipo_servicio.comision_pct
+        if comision_pct is None:
+            comision_pct = barbero.porcentaje_comision
+
         servicio = ServicioRealizado(
             barbero_id=db_turno.barbero_id,
             tipo_servicio_id=db_turno.tipo_servicio_id,
             turno_id=db_turno.id,
             fecha_hora=db_turno.fecha_hora,
             precio_cobrado=body.precio_cobrado if body.precio_cobrado is not None else tipo_servicio.precio_base,
-            comision_pct=body.comision_pct if body.comision_pct is not None else barbero.porcentaje_comision,
+            comision_pct=comision_pct,
             notas=body.notas,
         )
         db_turno.estado = EstadoTurno.completado

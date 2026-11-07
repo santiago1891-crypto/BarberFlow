@@ -10,6 +10,7 @@ import Personal from "./views/Personal.jsx";
 import HistorialVentas from "./views/HistorialVentas.jsx";
 import Finanzas from "./views/Finanzas.jsx";
 import { reportesApi } from "../../lib/resources.js";
+import { getCierreDeHoy } from "../../lib/cierreCaja.js";
 
 const TITLES = {
   panel: "Panel de Control",
@@ -36,6 +37,9 @@ export default function DashboardLayout({ username, onLogout }) {
   const [search, setSearch] = useState("");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [cerrarCajaOpen, setCerrarCajaOpen] = useState(false);
+  // Si la caja de hoy ya se cerró (ver lib/cierreCaja.js), el Topbar lo
+  // muestra y el modal arranca en el estado "cerrada".
+  const [cierreHoy, setCierreHoy] = useState(() => getCierreDeHoy());
   const [pendingCount, setPendingCount] = useState(0);
   const citasRef = useRef(null);
   const serviciosRef = useRef(null);
@@ -118,6 +122,7 @@ export default function DashboardLayout({ username, onLogout }) {
           onLogout={onLogout}
           onOpenMobileNav={() => setMobileNavOpen(true)}
           onOpenCerrarCaja={() => setCerrarCajaOpen(true)}
+          cajaCerrada={!!cierreHoy}
           pageTitle={TITLES[view]}
         />
 
@@ -135,7 +140,11 @@ export default function DashboardLayout({ username, onLogout }) {
         </main>
       </div>
 
-      <CerrarCajaModal open={cerrarCajaOpen} onClose={() => setCerrarCajaOpen(false)} />
+      <CerrarCajaModal
+        open={cerrarCajaOpen}
+        onClose={() => setCerrarCajaOpen(false)}
+        onCierreChange={setCierreHoy}
+      />
     </div>
   );
 }

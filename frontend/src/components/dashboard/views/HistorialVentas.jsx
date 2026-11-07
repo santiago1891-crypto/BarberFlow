@@ -1,6 +1,12 @@
-import { useEffect, useMemo, useState, forwardRef, useImperativeHandle } from "react";
+import { useEffect, useMemo, useState, forwardRef, useImperativeHandle, useRef } from "react";
 import { DollarSign, Scissors, Receipt, ChevronLeft, ChevronRight, Filter, Plus } from "lucide-react";
-import { serviciosRealizadosApi, barberosApi, tiposServicioApi, turnosApi } from "../../../lib/resources.js";
+import {
+  serviciosRealizadosApi,
+  barberosApi,
+  tiposServicioApi,
+  turnosApi,
+  fetchAllPages,
+} from "../../../lib/resources.js";
 import {
   formatMoney,
   formatDateTime,
@@ -13,7 +19,7 @@ import { toast } from "../../../lib/toast.js";
 import StatCard from "../../ui/StatCard.jsx";
 import Modal from "../../ui/Modal.jsx";
 import { Field, TextInput, SelectInput, TextArea } from "../../ui/Field.jsx";
-import { LoadingBlock, EmptyBlock } from "../../ui/StateBlocks.jsx";
+import { LoadingBlock, EmptyBlock, ErrorBlock } from "../../ui/StateBlocks.jsx";
 
 const PAGE_SIZE = 10;
 
@@ -55,6 +61,7 @@ const HistorialVentas = forwardRef(function HistorialVentas({ search }, ref) {
   const [tipos, setTipos] = useState([]);
   const [turnosMap, setTurnosMap] = useState(new Map());
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [preset, setPreset] = useState("mes");
   const [barberoFiltro, setBarberoFiltro] = useState("");
   const [page, setPage] = useState(0);
@@ -63,6 +70,20 @@ const HistorialVentas = forwardRef(function HistorialVentas({ search }, ref) {
   const [servicioForm, setServicioForm] = useState(EMPTY_SERVICIO_FORM);
   const [savingServicio, setSavingServicio] = useState(false);
   const [servicioError, setServicioError] = useState("");
+  // true cuando el usuario escribió el precio a mano: a partir de ahí no se
+  // pisa más al cambiar de servicio.
+  const [precioEditado, setPrecioEditado] = useState(false);
+
+  // Los catálogos (barberos/servicios) se cargan aparte de las ventas: si
+  // alguien pide "Registrar servicio" antes de que lleguen, en vez de
+  // fallar con un toast engañoso guardamos el pedido y lo abrimos apenas
+  // terminen de cargar.
+  const [catalogosListos, setCatalogosListos] = useState(false);
+  const [pendienteCrear, setPendienteCrear] = useState(false);
+
+  // Número de carga en curso: si responde una vieja, se ignora (así un
+  // cambio de filtro lento no pisa al más nuevo).
+  const loadIdRef = useRef(0);
 
   useImperativeHandle(ref, () => ({
     openCreate: () => openCreateServicio(),
@@ -71,41 +92,61 @@ const HistorialVentas = forwardRef(function HistorialVentas({ search }, ref) {
   async function loadCatalogos() {
     try {
       const [b, t, turnos] = await Promise.all([
-        barberosApi.list({ limit: 200 }),
-        tiposServicioApi.list({ limit: 200 }),
-        turnosApi.list({ limit: 500 }),
+        fetchAllPages(barberosApi.list),
+        fetchAllPages(tiposServicioApi.list),
+        fetchAllPages(turnosApi.list, {}, { pageSize: 200, maxPages: 10 }),
       ]);
       setBarberos(b);
       setTipos(t);
       setTurnosMap(new Map(turnos.map((tu) => [tu.id, tu])));
     } catch (err) {
       toast.error(err.message || "No se pudieron cargar los catálogos.");
+    } finally {
+      setCatalogosListos(true);
     }
   }
 
   async function loadServicios() {
+    const loadId = (loadIdRef.current += 1);
     setLoading(true);
+    setError("");
     try {
-      const params = { limit: 200, ...rangeFor(preset) };
+      const params = { ...rangeFor(preset) };
       if (barberoFiltro) params.barbero_id = barberoFiltro;
-      const data = await serviciosRealizadosApi.list(params);
-      setServicios(data.sort((a, b) => new Date(b.fecha_hora) - new Date(a.fecha_hora)));
+      const data = await fetchAllPages(serviciosRealizadosApi.list, params);
+      if (loadId !== loadIdRef.current) return;
+      setServicios([...data].sort((a, b) => new Date(b.fecha_hora) - new Date(a.fecha_hora)));
       setPage(0);
     } catch (err) {
-      toast.error(err.message || "No se pudo cargar el historial de ventas.");
+      if (loadId !== loadIdRef.current) return;
+      setError(err.message || "No se pudo cargar el historial de ventas.");
     } finally {
-      setLoading(false);
+      if (loadId === loadIdRef.current) setLoading(false);
     }
   }
 
   useEffect(() => {
     loadCatalogos();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     loadServicios();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [preset, barberoFiltro]);
+
+  // El buscador global no recarga la lista, solo filtra el resultado: si la
+  // página no vuelve a 0 quedaban tablas vacías ("Mostrando 11-5 de 5").
+  useEffect(() => {
+    setPage(0);
+  }, [search, preset, barberoFiltro]);
+
+  useEffect(() => {
+    if (!pendienteCrear || !catalogosListos) return;
+    setPendienteCrear(false);
+    openCreateServicio();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendienteCrear, catalogosListos]);
 
   const barberosById = useMemo(() => new Map(barberos.map((b) => [b.id, b])), [barberos]);
   const tiposById = useMemo(() => new Map(tipos.map((t) => [t.id, t])), [tipos]);
@@ -137,9 +178,18 @@ const HistorialVentas = forwardRef(function HistorialVentas({ search }, ref) {
   }, [filtered]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const pageItems = filtered.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
+  // Si el filtro encoge la lista, la página pedida puede quedar fuera de
+  // rango: clamp acá para no mostrar un tbody vacío con un rango imposible.
+  const pagina = Math.min(page, totalPages - 1);
+  const pageItems = filtered.slice(pagina * PAGE_SIZE, pagina * PAGE_SIZE + PAGE_SIZE);
 
   function openCreateServicio() {
+    if (!catalogosListos) {
+      // Todavía están cargando los catálogos: guardamos el pedido y lo
+      // abrimos apenas terminen (ver useEffect de pendienteCrear).
+      setPendienteCrear(true);
+      return;
+    }
     if (barberosActivos.length === 0) {
       toast.error('Primero cargá al menos un barbero activo en "Personal".');
       return;
@@ -150,6 +200,7 @@ const HistorialVentas = forwardRef(function HistorialVentas({ search }, ref) {
     }
     setServicioForm({ ...EMPTY_SERVICIO_FORM, ...nowParts() });
     setServicioError("");
+    setPrecioEditado(false);
     setServicioModalOpen(true);
   }
 
@@ -159,19 +210,41 @@ const HistorialVentas = forwardRef(function HistorialVentas({ search }, ref) {
 
   function handleTipoChange(tipoId) {
     const tipo = tiposById.get(tipoId) || tiposActivos.find((t) => t.id === tipoId);
-    // Si el tipo de servicio es de antes de que existiera esta columna (o
-    // por algún motivo no trae comision_pct), usamos 0 en vez de "undefined"
-    // — eso es lo que generaba el NaN.
-    const comisionDelTipo = tipo && Number.isFinite(Number(tipo.comision_pct)) ? String(tipo.comision_pct) : "0";
+    // Si el tipo no trae comisión (dato viejo, por ejemplo), dejamos "" en
+    // vez de mandar 0: al guardar se resuelve con la del barbero. Mandar 0
+    // hacía que todos los servicios manuales quedaran con comisión $0 y la
+    // ganancia de la barbería se inflaba en los reportes.
+    const comisionDelTipo =
+      tipo && tipo.comision_pct != null && Number.isFinite(Number(tipo.comision_pct))
+        ? String(tipo.comision_pct)
+        : "";
     setServicioForm((f) => ({
       ...f,
       tipo_servicio_id: tipoId,
-      // Precio y comisión son del tipo de servicio elegido. El precio queda
-      // editable (descuentos, combos, etc.); la comisión no — es la que ya
-      // definiste para ese servicio en "Servicios".
-      precio_cobrado: f.precio_cobrado || (tipo ? String(tipo.precio_base) : f.precio_cobrado),
+      // Precio: se prellena con la lista del servicio elegido salvo que el
+      // usuario ya lo haya editado a mano (descuentos, combos, etc.).
+      // La comisión no se edita: es la que está configurada en "Servicios".
+      precio_cobrado:
+        precioEditado || !tipo || tipo.precio_base == null
+          ? f.precio_cobrado
+          : String(tipo.precio_base),
       comision_pct: tipo ? comisionDelTipo : f.comision_pct,
     }));
+  }
+
+  /** % de comisión a registrar, en orden: formulario (lo del tipo de
+   *  servicio) → tipo de servicio → porcentaje del barbero → 0. */
+  function comisionARegistrar() {
+    const tipo = tiposById.get(servicioForm.tipo_servicio_id);
+    const barbero = barberosById.get(Number(servicioForm.barbero_id));
+    if (servicioForm.comision_pct !== "") return servicioForm.comision_pct;
+    if (tipo?.comision_pct != null && Number.isFinite(Number(tipo.comision_pct))) {
+      return String(tipo.comision_pct);
+    }
+    if (barbero?.porcentaje_comision != null && Number.isFinite(Number(barbero.porcentaje_comision))) {
+      return String(barbero.porcentaje_comision);
+    }
+    return "0";
   }
 
   async function handleServicioSubmit(e) {
@@ -182,7 +255,7 @@ const HistorialVentas = forwardRef(function HistorialVentas({ search }, ref) {
       setServicioError("Elegí un barbero.");
       return;
     }
-    if (!servicioForm.tipo_servicio_id || servicioForm.comision_pct === "") {
+    if (!servicioForm.tipo_servicio_id) {
       setServicioError("Elegí un servicio para determinar la comisión.");
       return;
     }
@@ -198,7 +271,7 @@ const HistorialVentas = forwardRef(function HistorialVentas({ search }, ref) {
         tipo_servicio_id: servicioForm.tipo_servicio_id,
         fecha_hora: combineDateAndTime(servicioForm.fecha, servicioForm.hora),
         precio_cobrado: servicioForm.precio_cobrado,
-        comision_pct: servicioForm.comision_pct,
+        comision_pct: comisionARegistrar(),
         notas: servicioForm.notas.trim() || null,
       });
       toast.success("Servicio registrado.");
@@ -268,6 +341,8 @@ const HistorialVentas = forwardRef(function HistorialVentas({ search }, ref) {
       <div className="rounded-2xl bg-card border border-primary/[0.12] p-5">
         {loading ? (
           <LoadingBlock label="Cargando historial…" />
+        ) : error ? (
+          <ErrorBlock label={error} onRetry={loadServicios} />
         ) : filtered.length === 0 ? (
           <EmptyBlock label="No hay ventas para este filtro." />
         ) : (
@@ -316,23 +391,23 @@ const HistorialVentas = forwardRef(function HistorialVentas({ search }, ref) {
 
             <div className="flex items-center justify-between pt-4 mt-1 border-t border-tertiary/60">
               <p className="text-xs text-[#6b6459]">
-                Mostrando {page * PAGE_SIZE + 1}-{Math.min((page + 1) * PAGE_SIZE, filtered.length)} de{" "}
+                Mostrando {pagina * PAGE_SIZE + 1}-{Math.min((pagina + 1) * PAGE_SIZE, filtered.length)} de{" "}
                 {filtered.length}
               </p>
               <div className="flex items-center gap-1.5">
                 <button
-                  disabled={page === 0}
-                  onClick={() => setPage((p) => Math.max(0, p - 1))}
+                  disabled={pagina === 0}
+                  onClick={() => setPage(Math.max(0, pagina - 1))}
                   className="p-1.5 rounded-lg border border-tertiary text-[#9C9488] disabled:opacity-40 hover:text-[#F2EDE3] transition-colors"
                 >
                   <ChevronLeft size={14} />
                 </button>
                 <span className="text-xs text-[#9C9488] px-2 font-mono">
-                  {page + 1}/{totalPages}
+                  {pagina + 1}/{totalPages}
                 </span>
                 <button
-                  disabled={page >= totalPages - 1}
-                  onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                  disabled={pagina >= totalPages - 1}
+                  onClick={() => setPage(Math.min(totalPages - 1, pagina + 1))}
                   className="p-1.5 rounded-lg border border-tertiary text-[#9C9488] disabled:opacity-40 hover:text-[#F2EDE3] transition-colors"
                 >
                   <ChevronRight size={14} />
@@ -422,7 +497,10 @@ const HistorialVentas = forwardRef(function HistorialVentas({ search }, ref) {
               min="0"
               step="0.01"
               value={servicioForm.precio_cobrado}
-              onChange={(e) => setServicioForm({ ...servicioForm, precio_cobrado: e.target.value })}
+              onChange={(e) => {
+                setPrecioEditado(true);
+                setServicioForm({ ...servicioForm, precio_cobrado: e.target.value });
+              }}
             />
           </Field>
 

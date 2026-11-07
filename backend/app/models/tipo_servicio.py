@@ -14,6 +14,10 @@ class TipoServicio(Base):
     __table_args__ = (
         CheckConstraint("duracion_min > 0", name="tipos_servicio_duracion_min_check"),
         CheckConstraint("precio_base >= 0", name="tipos_servicio_precio_base_check"),
+        CheckConstraint(
+            "comision_pct >= 0 AND comision_pct <= 100",
+            name="ck_tipos_servicio_tipos_servicio_comision_pct_check",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -26,6 +30,11 @@ class TipoServicio(Base):
     precio_base: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
     # Duración estimada en minutos, sirve para organizar turnos
     duracion_min: Mapped[int] = mapped_column(Integer, nullable=False, server_default="30")
+    # % de comisión que cobra el barbero cuando se registra un servicio de
+    # este tipo. La columna ya existía en la base (migración 4f5f8dc20f76)
+    # pero no estaba mapeada, así que el valor configurado en "Servicios"
+    # se descartaba al guardar y ni siquiera se devolvía en la API.
+    comision_pct: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=False, server_default=text("40"))
 
     activo: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
 

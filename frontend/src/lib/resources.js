@@ -1,6 +1,4 @@
-// Funciones tipadas por recurso, todas contra los endpoints reales del
-// backend de BarberFlow (barberia-crud). Cada una usa `request()` de
-// ./api.js, que ya adjunta el JWT y homogeneiza los errores.
+
 
 import { request, qs } from "./api.js";
 
@@ -53,3 +51,13 @@ export const reportesApi = {
   gananciasBarberosHoy: () => request(`/reportes/ganancias-barberos-hoy`),
   gananciaBarberiaHoy: () => request(`/reportes/ganancia-barberia-hoy`),
 };
+
+export async function fetchAllPages(listFn, params = {}, { pageSize = 200, maxPages = 10 } = {}) {
+  const todos = [];
+  for (let page = 0; page < maxPages; page += 1) {
+    const chunk = await listFn({ ...params, limit: pageSize, skip: page * pageSize });
+    todos.push(...chunk);
+    if (chunk.length < pageSize) break;
+  }
+  return todos;
+}
