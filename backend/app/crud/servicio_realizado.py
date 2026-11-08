@@ -30,7 +30,8 @@ class CRUDServicioRealizado(CRUDBase[ServicioRealizado, ServicioRealizadoCreate,
             stmt = stmt.where(ServicioRealizado.fecha_hora >= fecha_desde)
         if fecha_hasta is not None:
             stmt = stmt.where(ServicioRealizado.fecha_hora <= fecha_hasta)
-        stmt = stmt.order_by(ServicioRealizado.fecha_hora.desc()).offset(skip).limit(limit)
+        # `id` como tiebreaker para paginación estable (misma fecha_hora).
+        stmt = stmt.order_by(ServicioRealizado.fecha_hora.desc(), ServicioRealizado.id.desc()).offset(skip).limit(limit)
         result = await db.execute(stmt)
         return list(result.scalars().all())
 

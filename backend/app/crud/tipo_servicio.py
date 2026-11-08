@@ -18,7 +18,8 @@ class CRUDTipoServicio(CRUDBase[TipoServicio, TipoServicioCreate, TipoServicioUp
         stmt = select(TipoServicio)
         if activo is not None:
             stmt = stmt.where(TipoServicio.activo == activo)
-        stmt = stmt.order_by(TipoServicio.nombre).offset(skip).limit(limit)
+        # `id` como tiebreaker: nombres repetidos quedan en orden estable.
+        stmt = stmt.order_by(TipoServicio.nombre, TipoServicio.id).offset(skip).limit(limit)
         result = await db.execute(stmt)
         return list(result.scalars().all())
 

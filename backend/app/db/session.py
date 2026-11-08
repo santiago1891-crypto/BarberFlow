@@ -5,7 +5,14 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from app.core.config import settings
 
 # echo=settings.debug -> muestra las queries SQL en consola si DEBUG=True
-engine = create_async_engine(settings.database_url, echo=settings.debug, future=True)
+engine = create_async_engine(
+    settings.database_url,
+    echo=settings.debug,
+    future=True,
+    # Parámetros de sesión al conectarse (asyncpg): la zona horaria define
+    # qué es "hoy" en los reportes y en el cierre de caja. Ver config.
+    connect_args={"server_settings": {"timezone": settings.timezone}},
+)
 
 AsyncSessionLocal = async_sessionmaker(
     bind=engine,

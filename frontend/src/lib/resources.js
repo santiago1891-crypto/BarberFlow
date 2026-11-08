@@ -48,7 +48,6 @@ export const pagosApi = {
 export const reportesApi = {
   agendaHoy: () => request(`/reportes/agenda-hoy`),
   comisionesMesActual: () => request(`/reportes/comisiones-mes-actual`),
-  gananciasBarberosHoy: () => request(`/reportes/ganancias-barberos-hoy`),
   gananciaBarberiaHoy: () => request(`/reportes/ganancia-barberia-hoy`),
 };
 

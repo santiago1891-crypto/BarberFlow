@@ -1,7 +1,7 @@
 from datetime import date
 from decimal import Decimal
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,8 +20,16 @@ async def _fecha_de_hoy(db: AsyncSession) -> date:
 
 
 async def _cierres_de_fecha(db: AsyncSession, fecha: date) -> list[CierreCaja]:
-    """Cierres guardados de esa fecha, del más antiguo al más reciente."""
-    stmt = select(CierreCaja).where(CierreCaja.fecha == fecha).order_by(CierreCaja.cerrado_en)
+    """Cierres guardados de esa fecha, del más antiguo al más reciente.
+
+    `id` como tiebreaker: si dos cierres comparten `cerrado_en` (misma
+    transacción o precisión del reloj), el orden queda igualmente definido.
+    """
+    stmt = (
+        select(CierreCaja)
+        .where(CierreCaja.fecha == fecha)
+        .order_by(CierreCaja.cerrado_en, CierreCaja.id)
+    )
     return list((await db.execute(stmt)).scalars().all())
 
 
@@ -120,6 +128,14 @@ async def guardar_cierre(db: AsyncSession, fecha: date | None = None):
     /reportes/*: el registro no depende de lo que el navegador tenía cargado.
     """
     resumen = await reportes.get_ganancia_barberia_fecha(db, fecha)
+    # Lock de transacción por fecha ANTES de leer los cierres previos: dos
+    # pestañas que cierran a la vez se serializan acá. Sin esto ambas leen
+    # los mismos previos (READ COMMITTED) y guardan dos filas con el mismo
+    # período: el historial sumaría de más y "deshacer" solo borraría una.
+    # pg_advisory_xact_lock se libera solo al commit/rollback.
+    await db.execute(
+        select(func.pg_advisory_xact_lock(func.hashtextextended(f"cierres_caja:{resumen.fecha}", 0)))
+    )
     barberos = await reportes.get_ganancias_barberos_fecha(db, fecha)
     previos = await _cierres_de_fecha(db, resumen.fecha)
     valores, por_barbero = _periodo(resumen, barberos, previos)
@@ -145,7 +161,7 @@ async def get_ultimo_hoy(db: AsyncSession) -> CierreCaja | None:
     stmt = (
         select(CierreCaja)
         .where(CierreCaja.fecha == hoy)
-        .order_by(CierreCaja.cerrado_en.desc())
+        .order_by(CierreCaja.cerrado_en.desc(), CierreCaja.id.desc())
         .limit(1)
     )
     return (await db.execute(stmt)).scalars().first()
@@ -165,12 +181,5 @@ async def eliminar_ultimo_hoy(db: AsyncSession) -> bool:
 
 async def listar(db: AsyncSession, limit: int = 100) -> list[CierreCaja]:
     """Historial de cierres, del más reciente al más antiguo."""
-    stmt = select(CierreCaja).order_by(CierreCaja.cerrado_en.desc()).limit(limit)
+    stmt = select(CierreCaja).order_by(CierreCaja.cerrado_en.desc(), CierreCaja.id.desc()).limit(limit)
     return list((await db.execute(stmt)).scalars().all())
-
-
-async def eliminar_todo_de_fecha(db: AsyncSession, fecha: date) -> int:
-    """Borra todos los cierres de una fecha (uso interno/tests)."""
-    result = await db.execute(delete(CierreCaja).where(CierreCaja.fecha == fecha))
-    await db.commit()
-    return int(result.rowcount or 0)

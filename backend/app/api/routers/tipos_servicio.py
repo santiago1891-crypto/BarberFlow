@@ -12,8 +12,8 @@ router = APIRouter(prefix="/tipos-servicio", tags=["Tipos de servicio"])
 
 @router.get("/", response_model=list[TipoServicioRead])
 async def listar_tipos_servicio(
-    skip: int = 0,
-    limit: int = 100,
+    skip: int = Query(0, ge=0, description="Registros a saltear"),
+    limit: int = Query(100, ge=1, le=1000, description="Máximo de registros a devolver"),
     activo: bool | None = Query(None, description="Filtrar por tipos de servicio activos/inactivos"),
     db: AsyncSession = Depends(get_db),
 ):

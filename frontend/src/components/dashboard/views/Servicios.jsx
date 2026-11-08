@@ -1,13 +1,13 @@
 import { useEffect, useImperativeHandle, useMemo, useState, forwardRef } from "react";
 import { Plus, Pencil, Trash2, Power, Clock } from "lucide-react";
-import { tiposServicioApi } from "../../../lib/resources.js";
+import { tiposServicioApi, fetchAllPages } from "../../../lib/resources.js";
 import { formatMoney } from "../../../lib/format.js";
 import { toast } from "../../../lib/toast.js";
 import Badge from "../../ui/Badge.jsx";
 import Modal from "../../ui/Modal.jsx";
 import ConfirmDialog from "../../ui/ConfirmDialog.jsx";
 import { Field, TextInput, TextArea } from "../../ui/Field.jsx";
-import { LoadingBlock, EmptyBlock } from "../../ui/StateBlocks.jsx";
+import { LoadingBlock, EmptyBlock, ErrorBlock } from "../../ui/StateBlocks.jsx";
 
 const EMPTY_FORM = {
   nombre: "",
@@ -21,7 +21,12 @@ const EMPTY_FORM = {
 const Servicios = forwardRef(function Servicios({ search }, ref) {
   const [tipos, setTipos] = useState([]);
   const [loading, setLoading] = useState(true);
+  // Si la carga falla, se muestra ErrorBlock: sin esto un error de red
+  // quedaba pintado como "no cargaste ningún servicio".
+  const [error, setError] = useState("");
   const [filtro, setFiltro] = useState("todos"); // todos | activos | inactivos
+  // Id del servicio que se está activando/desactivando (evita doble PATCH)
+  const [togglingId, setTogglingId] = useState(null);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -38,11 +43,14 @@ const Servicios = forwardRef(function Servicios({ search }, ref) {
 
   async function load() {
     setLoading(true);
+    setError("");
     try {
-      const data = await tiposServicioApi.list({ limit: 200 });
+      // Paginado completo: con limit fijo, a partir de ~200 servicios la
+      // lista quedaba truncada sin aviso.
+      const data = await fetchAllPages(tiposServicioApi.list);
       setTipos(data);
     } catch (err) {
-      toast.error(err.message || "No se pudieron cargar los servicios.");
+      setError(err.message || "No se pudieron cargar los servicios.");
     } finally {
       setLoading(false);
     }
@@ -131,12 +139,16 @@ const Servicios = forwardRef(function Servicios({ search }, ref) {
   }
 
   async function toggleActivo(t) {
+    if (togglingId) return;
+    setTogglingId(t.id);
     try {
       await tiposServicioApi.update(t.id, { activo: !t.activo });
       toast.success(t.activo ? "Servicio desactivado." : "Servicio reactivado.");
       load();
     } catch (err) {
       toast.error(err.message || "No se pudo actualizar el estado.");
+    } finally {
+      setTogglingId(null);
     }
   }
 
@@ -185,7 +197,7 @@ const Servicios = forwardRef(function Servicios({ search }, ref) {
         </button>
       </div>
 
-      {tipos.length === 0 && !loading && (
+      {tipos.length === 0 && !loading && !error && (
         <div className="rounded-lg bg-primary-soft border border-primary/30 px-4 py-3 text-sm text-[#F2EDE3]">
           Todavía no cargaste ningún servicio. Sin al menos uno, no vas a poder agendar citas —
           empezá creando el primero con <strong>"Nuevo servicio"</strong>.
@@ -195,6 +207,8 @@ const Servicios = forwardRef(function Servicios({ search }, ref) {
       <div className="rounded-2xl bg-card border border-primary/[0.12] p-5">
         {loading ? (
           <LoadingBlock label="Cargando servicios…" />
+        ) : error ? (
+          <ErrorBlock label={error} onRetry={load} />
         ) : filtered.length === 0 ? (
           <EmptyBlock label="No se encontraron servicios con ese filtro." />
         ) : (
@@ -235,8 +249,9 @@ const Servicios = forwardRef(function Servicios({ search }, ref) {
                       <div className="flex items-center justify-end gap-1.5">
                         <button
                           onClick={() => toggleActivo(t)}
+                          disabled={togglingId === t.id}
                           title={t.activo ? "Desactivar" : "Reactivar"}
-                          className="p-1.5 rounded-lg text-[#6b6459] hover:text-warning hover:bg-warning-soft transition-colors"
+                          className="p-1.5 rounded-lg text-[#6b6459] hover:text-warning hover:bg-warning-soft transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                         >
                           <Power size={14} />
                         </button>

@@ -25,18 +25,21 @@ const PAGE_SIZE = 10;
 
 function rangeFor(preset) {
   const now = new Date();
+  // Hasta = fin de hoy (no "ahora"): un servicio registrado hoy con hora
+  // posterior a este momento no debía quedar fuera del período.
+  const finDeHoy = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
   if (preset === "hoy") {
     const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
-    return { fecha_desde: start.toISOString(), fecha_hasta: now.toISOString() };
+    return { fecha_desde: start.toISOString(), fecha_hasta: finDeHoy.toISOString() };
   }
   if (preset === "semana") {
     const start = new Date(now);
     start.setDate(start.getDate() - 7);
-    return { fecha_desde: start.toISOString(), fecha_hasta: now.toISOString() };
+    return { fecha_desde: start.toISOString(), fecha_hasta: finDeHoy.toISOString() };
   }
   if (preset === "mes") {
     const start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0);
-    return { fecha_desde: start.toISOString(), fecha_hasta: now.toISOString() };
+    return { fecha_desde: start.toISOString(), fecha_hasta: finDeHoy.toISOString() };
   }
   return {};
 }
@@ -80,6 +83,9 @@ const HistorialVentas = forwardRef(function HistorialVentas({ search }, ref) {
   // terminen de cargar.
   const [catalogosListos, setCatalogosListos] = useState(false);
   const [pendienteCrear, setPendienteCrear] = useState(false);
+  // Si la carga de catálogos falla, openCreate ofrece reintentar en vez de
+  // mostrar "primero cargá un barbero" (que ya existe).
+  const [catalogosError, setCatalogosError] = useState("");
 
   // Número de carga en curso: si responde una vieja, se ignora (así un
   // cambio de filtro lento no pisa al más nuevo).
@@ -91,18 +97,18 @@ const HistorialVentas = forwardRef(function HistorialVentas({ search }, ref) {
 
   async function loadCatalogos() {
     try {
-      const [b, t, turnos] = await Promise.all([
+      const [b, t] = await Promise.all([
         fetchAllPages(barberosApi.list),
         fetchAllPages(tiposServicioApi.list),
-        fetchAllPages(turnosApi.list, {}, { pageSize: 200, maxPages: 10 }),
       ]);
       setBarberos(b);
       setTipos(t);
-      setTurnosMap(new Map(turnos.map((tu) => [tu.id, tu])));
-    } catch (err) {
-      toast.error(err.message || "No se pudieron cargar los catálogos.");
-    } finally {
+      setCatalogosError("");
+      // Solo si la carga salió bien: marcarlo en el finally hacía que
+      // openCreate mostrara "cargá un barbero" con la lista rota.
       setCatalogosListos(true);
+    } catch (err) {
+      setCatalogosError(err.message || "No se pudieron cargar los catálogos.");
     }
   }
 
@@ -113,8 +119,17 @@ const HistorialVentas = forwardRef(function HistorialVentas({ search }, ref) {
     try {
       const params = { ...rangeFor(preset) };
       if (barberoFiltro) params.barbero_id = barberoFiltro;
-      const data = await fetchAllPages(serviciosRealizadosApi.list, params);
+      const [data, turnos] = await Promise.all([
+        fetchAllPages(serviciosRealizadosApi.list, params),
+        // Turnos del MISMO rango que los servicios: antes se cargaban una
+        // sola vez (hasta 2000, del más viejo al más nuevo) y con el tiempo
+        // los turnos recientes quedaban fuera del mapa → servicios con
+        // turno_id aparecían como "Walk-in". El mapa se usa para mostrar y
+        // buscar el cliente de cada fila.
+        fetchAllPages(turnosApi.list, { fecha_desde: params.fecha_desde, fecha_hasta: params.fecha_hasta }),
+      ]);
       if (loadId !== loadIdRef.current) return;
+      setTurnosMap(new Map(turnos.map((tu) => [tu.id, tu])));
       setServicios([...data].sort((a, b) => new Date(b.fecha_hora) - new Date(a.fecha_hora)));
       setPage(0);
     } catch (err) {
@@ -184,6 +199,14 @@ const HistorialVentas = forwardRef(function HistorialVentas({ search }, ref) {
   const pageItems = filtered.slice(pagina * PAGE_SIZE, pagina * PAGE_SIZE + PAGE_SIZE);
 
   function openCreateServicio() {
+    if (catalogosError) {
+      // Falló la carga: reintentamos y abrimos apenas esté lista, en vez
+      // de culpar al usuario por no tener barberos cargados.
+      setCatalogosError("");
+      setPendienteCrear(true);
+      loadCatalogos();
+      return;
+    }
     if (!catalogosListos) {
       // Todavía están cargando los catálogos: guardamos el pedido y lo
       // abrimos apenas terminen (ver useEffect de pendienteCrear).
@@ -259,6 +282,12 @@ const HistorialVentas = forwardRef(function HistorialVentas({ search }, ref) {
       setServicioError("Elegí un servicio para determinar la comisión.");
       return;
     }
+    // Sin esta validación se mandaba fecha_hora: null (columna NOT NULL):
+    // el backend respondía 409 con un mensaje de "valor duplicado".
+    if (!servicioForm.fecha || !servicioForm.hora) {
+      setServicioError("La fecha y la hora son obligatorias.");
+      return;
+    }
     if (!servicioForm.precio_cobrado || Number(servicioForm.precio_cobrado) < 0) {
       setServicioError("Ingresá un precio válido.");
       return;
@@ -286,11 +315,15 @@ const HistorialVentas = forwardRef(function HistorialVentas({ search }, ref) {
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <StatCard icon={DollarSign} label="Ventas totales" value={formatMoney(stats.total)} accent="primary" />
-        <StatCard icon={Scissors} label="Servicios realizados" value={stats.count} accent="secondary" />
-        <StatCard icon={Receipt} label="Ticket promedio" value={formatMoney(stats.ticketPromedio)} accent="success" />
-      </div>
+      {/* Sin datos reales no se muestran montos: $0.00 durante una carga
+          fallida se leía como "hoy no vendí nada". */}
+      {!loading && !error && (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <StatCard icon={DollarSign} label="Ventas totales" value={formatMoney(stats.total)} accent="primary" />
+          <StatCard icon={Scissors} label="Servicios realizados" value={stats.count} accent="secondary" />
+          <StatCard icon={Receipt} label="Ticket promedio" value={formatMoney(stats.ticketPromedio)} accent="success" />
+        </div>
+      )}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
@@ -373,7 +406,12 @@ const HistorialVentas = forwardRef(function HistorialVentas({ search }, ref) {
                         <td className="px-2 py-3 text-[#9C9488] whitespace-nowrap">
                           {formatDateTime(s.fecha_hora)}
                         </td>
-                        <td className="px-2 py-3 text-[#F2EDE3]">{turno?.cliente_nombre || "Walk-in"}</td>
+                        <td className="px-2 py-3 text-[#F2EDE3]">
+                          {/* "Walk-in" solo si el servicio no vino de turno:
+                              si el turno no está en el mapa (borrado o fuera
+                              del rango) se muestra "—" en vez de mentir. */}
+                          {s.turno_id ? turno?.cliente_nombre || "—" : "Walk-in"}
+                        </td>
                         <td className="px-2 py-3 text-[#9C9488]">{tipo?.nombre || "—"}</td>
                         <td className="px-2 py-3 text-[#9C9488]">{barbero ? fullName(barbero) : "—"}</td>
                         <td className="px-2 py-3 text-right text-primary font-semibold">

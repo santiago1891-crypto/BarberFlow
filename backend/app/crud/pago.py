@@ -33,7 +33,9 @@ class CRUDPago(CRUDBase[Pago, PagoCreate, PagoUpdate]):
             stmt = stmt.where(Pago.estado == estado)
         if servicio_realizado_id is not None:
             stmt = stmt.where(Pago.servicio_realizado_id == servicio_realizado_id)
-        stmt = stmt.order_by(Pago.created_at.desc()).offset(skip).limit(limit)
+        # `id` como tiebreaker: dos pagos en el mismo instante se paginan
+        # con orden estable y no se pierden ni se repiten entre páginas.
+        stmt = stmt.order_by(Pago.created_at.desc(), Pago.id.desc()).offset(skip).limit(limit)
         result = await db.execute(stmt)
         return list(result.scalars().all())
 

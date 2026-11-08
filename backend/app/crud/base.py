@@ -2,7 +2,6 @@ import uuid
 from typing import Any, Generic, TypeVar
 
 from pydantic import BaseModel
-from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -30,12 +29,6 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
     async def get(self, db: AsyncSession, id: uuid.UUID) -> ModelType | None:
         return await db.get(self.model, id)
 
-    async def get_multi(
-        self, db: AsyncSession, *, skip: int = 0, limit: int = 100
-    ) -> list[ModelType]:
-        result = await db.execute(select(self.model).offset(skip).limit(limit))
-        return list(result.scalars().all())
-
     async def create(self, db: AsyncSession, *, obj_in: CreateSchemaType) -> ModelType:
         obj_data = obj_in.model_dump(exclude_unset=True)
         db_obj = self.model(**obj_data)
@@ -44,9 +37,11 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
             await db.commit()
         except IntegrityError as e:
             await db.rollback()
+            # Mensaje neutral: un IntegrityError también es una FK
+            # inexistente o un NOT NULL violado, no solo un duplicado.
             raise ReglaDeNegocioError(
-                "No se pudo crear el registro: puede haber un valor duplicado "
-                "(por ejemplo, un nombre que ya existe)."
+                "No se pudo crear el registro: verificá los datos "
+                "(puede haber un valor duplicado o una referencia inexistente)."
             ) from e
         await db.refresh(db_obj)
         return db_obj
@@ -63,8 +58,8 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         except IntegrityError as e:
             await db.rollback()
             raise ReglaDeNegocioError(
-                "No se pudo guardar el cambio: puede haber un valor duplicado "
-                "(por ejemplo, un nombre que ya existe)."
+                "No se pudo guardar el cambio: verificá los datos "
+                "(puede haber un valor duplicado o una referencia inexistente)."
             ) from e
         await db.refresh(db_obj)
         return db_obj

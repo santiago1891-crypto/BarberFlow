@@ -43,7 +43,8 @@ class CRUDTurno(CRUDBase[Turno, TurnoCreate, TurnoUpdate]):
             stmt = stmt.where(Turno.fecha_hora >= fecha_desde)
         if fecha_hasta is not None:
             stmt = stmt.where(Turno.fecha_hora <= fecha_hasta)
-        stmt = stmt.order_by(Turno.fecha_hora).offset(skip).limit(limit)
+        # `id` como tiebreaker: turnos en el mismo minuto se paginan con orden estable.
+        stmt = stmt.order_by(Turno.fecha_hora, Turno.id).offset(skip).limit(limit)
         result = await db.execute(stmt)
         return list(result.scalars().all())
 

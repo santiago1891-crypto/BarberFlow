@@ -16,8 +16,8 @@ router = APIRouter(prefix="/turnos", tags=["Turnos"])
 
 @router.get("/", response_model=list[TurnoRead])
 async def listar_turnos(
-    skip: int = 0,
-    limit: int = 100,
+    skip: int = Query(0, ge=0, description="Registros a saltear"),
+    limit: int = Query(100, ge=1, le=1000, description="Máximo de registros a devolver"),
     barbero_id: int | None = Query(None, description="Filtrar por barbero"),
     estado: EstadoTurno | None = Query(None, description="Filtrar por estado del turno"),
     fecha_desde: datetime | None = Query(None, description="Turnos desde esta fecha/hora (inclusive)"),

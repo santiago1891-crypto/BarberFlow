@@ -69,6 +69,11 @@ const Citas = forwardRef(function Citas({ search }, ref) {
   // de fallar con "primero cargá un servicio".
   const [catalogosListos, setCatalogosListos] = useState(false);
   const [pendienteCrear, setPendienteCrear] = useState(false);
+  // Si la carga de catálogos falla, openCreate ofrece reintentar en vez de
+  // mostrar "primero cargá un servicio" (que ya existe).
+  const [catalogosError, setCatalogosError] = useState("");
+  // Id del turno cuyo estado se está actualizando (evita doble PATCH)
+  const [togglingId, setTogglingId] = useState(null);
 
   // Ignora respuestas de cargas viejas (cambios de filtro rápidos).
   const loadIdRef = useRef(0);
@@ -90,10 +95,12 @@ const Citas = forwardRef(function Citas({ search }, ref) {
       ]);
       setBarberos(b);
       setTipos(t);
-    } catch (err) {
-      toast.error(err.message || "No se pudieron cargar barberos/servicios.");
-    } finally {
+      setCatalogosError("");
+      // Solo si la carga salió bien: marcarlo en el finally hacía que
+      // openCreate mostrara "cargá un servicio" con la lista rota.
       setCatalogosListos(true);
+    } catch (err) {
+      setCatalogosError(err.message || "No se pudieron cargar barberos/servicios.");
     }
   }
 
@@ -171,6 +178,14 @@ const Citas = forwardRef(function Citas({ search }, ref) {
   }, [turnos, search, barberosById, tiposById]);
 
   function openCreate() {
+    if (catalogosError) {
+      // Falló la carga: reintentamos y abrimos apenas esté lista, en vez
+      // de culpar al usuario por no tener servicios/barberos cargados.
+      setCatalogosError("");
+      setPendienteCrear(true);
+      loadCatalogos();
+      return;
+    }
     if (!catalogosListos) {
       // Cargando catálogos: lo abrimos apenas terminen (ver useEffect).
       setPendienteCrear(true);
@@ -244,18 +259,22 @@ const Citas = forwardRef(function Citas({ search }, ref) {
   }
 
   async function quickUpdateEstado(turno, estado) {
+    if (togglingId) return;
     if (!TRANSICIONES_VALIDAS[turno.estado]?.includes(estado)) {
       toast.error(
         `No se puede pasar de "${ESTADO_META[turno.estado]?.label}" a "${ESTADO_META[estado]?.label}" directamente.`
       );
       return;
     }
+    setTogglingId(turno.id);
     try {
       await turnosApi.update(turno.id, { estado });
       toast.success("Estado del turno actualizado.");
       loadTurnos();
     } catch (err) {
       toast.error(err.message || "No se pudo actualizar el turno.");
+    } finally {
+      setTogglingId(null);
     }
   }
 
@@ -376,8 +395,9 @@ const Citas = forwardRef(function Citas({ search }, ref) {
                           {permitidos.includes("confirmado") && (
                             <button
                               onClick={() => quickUpdateEstado(t, "confirmado")}
+                              disabled={togglingId === t.id}
                               title="Confirmar"
-                              className="p-1.5 rounded-lg text-[#6b6459] hover:text-primary hover:bg-primary-soft transition-colors"
+                              className="p-1.5 rounded-lg text-[#6b6459] hover:text-primary hover:bg-primary-soft transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                             >
                               <CalendarCheck size={14} />
                             </button>
@@ -385,8 +405,9 @@ const Citas = forwardRef(function Citas({ search }, ref) {
                           {permitidos.includes("en_curso") && (
                             <button
                               onClick={() => quickUpdateEstado(t, "en_curso")}
+                              disabled={togglingId === t.id}
                               title="Iniciar"
-                              className="p-1.5 rounded-lg text-[#6b6459] hover:text-warning hover:bg-warning-soft transition-colors"
+                              className="p-1.5 rounded-lg text-[#6b6459] hover:text-warning hover:bg-warning-soft transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                             >
                               <PlayCircle size={14} />
                             </button>

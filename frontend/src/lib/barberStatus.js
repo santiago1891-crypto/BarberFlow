@@ -42,5 +42,3 @@ export function computeBarberStatuses(barberos = [], agendaHoy = []) {
 
   return map;
 }
-
-export { STATUS_META };

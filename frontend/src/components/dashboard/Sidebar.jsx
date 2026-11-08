@@ -5,8 +5,6 @@ import {
   Users,
   Receipt,
   Wallet,
-  Settings,
-  HelpCircle,
   Plus,
   X,
 } from "lucide-react";
@@ -104,23 +102,6 @@ export default function Sidebar({
         >
           <Plus size={12} />
           Añadir servicio al catálogo
-        </button>
-      </div>
-
-      <div className="px-3 pb-5 pt-3 border-t border-tertiary/70 space-y-1">
-        <button
-          onClick={() => onNavigate("configuracion")}
-          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-[#6b6459] hover:text-[#9C9488] transition-colors"
-        >
-          <Settings size={15} />
-          Configuración
-        </button>
-        <button
-          onClick={() => onNavigate("ayuda")}
-          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-[#6b6459] hover:text-[#9C9488] transition-colors"
-        >
-          <HelpCircle size={15} />
-          Ayuda
         </button>
       </div>
     </aside>

@@ -31,8 +31,25 @@ export async function login(username, password, { remember = true } = {}) {
   }
 
   if (!res.ok) {
-    const err = new Error("Usuario o contraseña incorrectos.");
-    err.code = "invalid_credentials";
+    // 401/400 = credenciales rechazadas por el backend. Cualquier otro
+    // status (500, 404 por VITE_API_URL mal configurada, etc.) NO es un
+    // problema de la contraseña: tratarlo como tal hacía que el usuario
+    // la cambiara creyéndose equivocado.
+    if (res.status === 401 || res.status === 400) {
+      const err = new Error("Usuario o contraseña incorrectos.");
+      err.code = "invalid_credentials";
+      throw err;
+    }
+    let detail = "";
+    try {
+      const data = await res.json();
+      if (typeof data.detail === "string") detail = data.detail;
+    } catch {
+      // Sin cuerpo JSON (por ejemplo un 500 en texto plano)
+    }
+    const err = new Error(detail || `No se pudo iniciar sesión (error ${res.status}).`);
+    err.code = "server_error";
+    err.status = res.status;
     throw err;
   }
 

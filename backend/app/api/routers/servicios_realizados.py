@@ -17,8 +17,8 @@ router = APIRouter(prefix="/servicios-realizados", tags=["Servicios realizados"]
 
 @router.get("/", response_model=list[ServicioRealizadoRead])
 async def listar_servicios_realizados(
-    skip: int = 0,
-    limit: int = 100,
+    skip: int = Query(0, ge=0, description="Registros a saltear"),
+    limit: int = Query(100, ge=1, le=1000, description="Máximo de registros a devolver"),
     barbero_id: int | None = Query(None, description="Filtrar por barbero"),
     tipo_servicio_id: uuid.UUID | None = Query(None, description="Filtrar por tipo de servicio"),
     fecha_desde: datetime | None = Query(None, description="Servicios desde esta fecha/hora (inclusive)"),

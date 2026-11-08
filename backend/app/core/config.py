@@ -23,6 +23,14 @@ class Settings(BaseSettings):
     app_env: str = "development"
     debug: bool = False
 
+    # --- Zona horaria de la barbería ---
+    # Define qué es "hoy" para los reportes y el cierre de caja: Postgres
+    # calcula current_date y cast(timestamptz AS date) con la zona de la
+    # sesión. Sin esto (default UTC) a partir de las 21:00 en Argentina el
+    # día ya había cambiado: la agenda mostraba mañana, la caja se vaciaba
+    # con ventas reales y los servicios de la noche caían en "mañana".
+    timezone: str = "America/Argentina/Buenos_Aires"
+
     # --- Autenticación (admin único) ---
     admin_username: str
     admin_password_hash: str

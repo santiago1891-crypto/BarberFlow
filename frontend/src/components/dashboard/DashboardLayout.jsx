@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { Construction } from "lucide-react";
 import Sidebar from "./Sidebar.jsx";
 import Topbar from "./Topbar.jsx";
 import CerrarCajaModal from "./CerrarCajaModal.jsx";
@@ -18,18 +17,7 @@ const TITLES = {
   personal: "Personal",
   historial: "Historial de Ventas",
   finanzas: "Finanzas",
-  configuracion: "Configuración",
-  ayuda: "Ayuda",
 };
-
-function Proximamente({ label }) {
-  return (
-    <div className="flex flex-col items-center justify-center gap-3 py-24 text-[#6b6459]">
-      <Construction size={26} />
-      <p className="text-sm">{label} está en construcción.</p>
-    </div>
-  );
-}
 
 export default function DashboardLayout({ username, onLogout }) {
   const [view, setView] = useState("panel");
@@ -40,7 +28,10 @@ export default function DashboardLayout({ username, onLogout }) {
   // deshacer un cierre): le avisa al Panel de Control que refresque los
   // valores de la caja actual. El estado real vive en el backend.
   const [cierreTick, setCierreTick] = useState(0);
-  const [pendingCount, setPendingCount] = useState(0);
+  // null = desconocido (carga inicial en curso o la request falló): la
+  // campanita no debe decir "no hay pendientes" si no pudo consultar.
+  const [pendingCount, setPendingCount] = useState(null);
+  const [pendingError, setPendingError] = useState(false);
   const citasRef = useRef(null);
   const serviciosRef = useRef(null);
   const historialRef = useRef(null);
@@ -50,9 +41,17 @@ export default function DashboardLayout({ username, onLogout }) {
     reportesApi
       .agendaHoy()
       .then((data) => {
-        if (alive) setPendingCount(data.filter((t) => t.estado === "pendiente").length);
+        if (!alive) return;
+        setPendingCount(data.filter((t) => t.estado === "pendiente").length);
+        setPendingError(false);
       })
-      .catch(() => {});
+      .catch(() => {
+        if (!alive) return;
+        // Dejar el 0 anterior (o el inicial) mostraba "No hay turnos
+        // pendientes" con la API caída.
+        setPendingCount(null);
+        setPendingError(true);
+      });
     return () => {
       alive = false;
     };
@@ -118,6 +117,7 @@ export default function DashboardLayout({ username, onLogout }) {
           search={search}
           onSearchChange={setSearch}
           pendingCount={pendingCount}
+          pendingError={pendingError}
           username={username}
           onLogout={onLogout}
           onOpenMobileNav={() => setMobileNavOpen(true)}
@@ -134,8 +134,6 @@ export default function DashboardLayout({ username, onLogout }) {
           {view === "personal" && <Personal search={search} />}
           {view === "historial" && <HistorialVentas ref={historialRef} search={search} />}
           {view === "finanzas" && <Finanzas search={search} />}
-          {view === "configuracion" && <Proximamente label="Configuración" />}
-          {view === "ayuda" && <Proximamente label="Ayuda" />}
         </main>
       </div>
 

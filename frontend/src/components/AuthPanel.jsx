@@ -47,9 +47,14 @@ export default function AuthPanel({ onAuthenticated }) {
       setError(
         err.code === "network_error"
           ? "No se pudo conectar con el servidor. Verifica que la API esté corriendo."
-          : "Usuario o contraseña incorrectos. Verifica tus datos e intenta de nuevo."
+          : err.code === "invalid_credentials"
+            ? "Usuario o contraseña incorrectos. Verifica tus datos e intenta de nuevo."
+            : err.message || "No se pudo iniciar sesión. Intenta de nuevo."
       );
-      setPassword("");
+      // La contraseña solo se borra si el problema son las credenciales:
+      // borrarla ante un error del servidor perdía la que el usuario
+      // escribió sin que hubiera nada que corregir.
+      if (err.code === "invalid_credentials") setPassword("");
       triggerShake();
     } finally {
       setLoading(false);

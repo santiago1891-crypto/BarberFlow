@@ -9,7 +9,7 @@ class BarberoBase(BaseModel):
     apellido: str = Field(..., max_length=100)
     telefono: str | None = Field(None, max_length=20)
     email: EmailStr | None = Field(None, max_length=150)
-    sueldo_fijo: Decimal = Decimal("0")
+    sueldo_fijo: Decimal = Field(Decimal("0"), ge=0)
     porcentaje_comision: Decimal = Field(Decimal("0"), ge=0, le=100)
     activo: bool = True
 
@@ -25,7 +25,7 @@ class BarberoUpdate(BaseModel):
     apellido: str | None = Field(None, max_length=100)
     telefono: str | None = Field(None, max_length=20)
     email: EmailStr | None = Field(None, max_length=150)
-    sueldo_fijo: Decimal | None = None
+    sueldo_fijo: Decimal | None = Field(None, ge=0)
     porcentaje_comision: Decimal | None = Field(None, ge=0, le=100)
     activo: bool | None = None
 

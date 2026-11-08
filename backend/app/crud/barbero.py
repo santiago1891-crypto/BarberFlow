@@ -18,7 +18,8 @@ class CRUDBarbero(CRUDBase[Barbero, BarberoCreate, BarberoUpdate]):
         stmt = select(Barbero)
         if activo is not None:
             stmt = stmt.where(Barbero.activo == activo)
-        stmt = stmt.order_by(Barbero.apellido, Barbero.nombre).offset(skip).limit(limit)
+        # `id` como tiebreaker: barberos con el mismo nombre quedan en orden estable.
+        stmt = stmt.order_by(Barbero.apellido, Barbero.nombre, Barbero.id).offset(skip).limit(limit)
         result = await db.execute(stmt)
         return list(result.scalars().all())
 

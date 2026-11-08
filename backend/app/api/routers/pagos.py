@@ -14,8 +14,8 @@ router = APIRouter(prefix="/pagos", tags=["Pagos"])
 
 @router.get("/", response_model=list[PagoRead])
 async def listar_pagos(
-    skip: int = 0,
-    limit: int = 100,
+    skip: int = Query(0, ge=0, description="Registros a saltear"),
+    limit: int = Query(100, ge=1, le=1000, description="Máximo de registros a devolver"),
     estado: EstadoPago | None = Query(None, description="Filtrar por estado del pago"),
     servicio_realizado_id: uuid.UUID | None = Query(None, description="Filtrar por servicio realizado"),
     db: AsyncSession = Depends(get_db),

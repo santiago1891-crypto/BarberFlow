@@ -3,6 +3,9 @@ export const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 const TOKEN_KEY = "barberflow_token";
 let unauthorizedHandler = null;
+// Al cargar el panel hay varios requests en paralelo y cada 401 disparaba
+// el aviso: con la bandera se notifica una sola vez por sesión caída.
+let aviso401Pendiente = false;
 
 export function onUnauthorized(handler) {
   unauthorizedHandler = handler;
@@ -26,6 +29,8 @@ export function setToken(token, persist = true) {
     sessionStorage.removeItem(TOKEN_KEY);
     return;
   }
+  // Entró un token nuevo (login): el próximo 401 vuelve a notificarse.
+  aviso401Pendiente = false;
   const destino = persist ? localStorage : sessionStorage;
   const otro = persist ? sessionStorage : localStorage;
   otro.removeItem(TOKEN_KEY);
@@ -47,7 +52,10 @@ export async function apiFetch(path, options = {}) {
 
   if (res.status === 401) {
     setToken(null);
-    unauthorizedHandler?.();
+    if (!aviso401Pendiente) {
+      aviso401Pendiente = true;
+      unauthorizedHandler?.();
+    }
   }
 
   return res;

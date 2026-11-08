@@ -1,11 +1,16 @@
+import logging
+
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.api.deps import get_current_admin
 from app.api.routers import auth, barberos, cierres_caja, pagos, reportes, servicios_realizados, tipos_servicio, turnos
 from app.core.config import settings
 from app.crud.base import ReglaDeNegocioError
+
+logger = logging.getLogger("barberflow")
 
 app = FastAPI(
     title="Barbería CRUD API",
@@ -33,6 +38,21 @@ app.add_middleware(
 @app.exception_handler(ReglaDeNegocioError)
 async def regla_de_negocio_handler(request, exc: ReglaDeNegocioError):
     return JSONResponse(status_code=409, content={"detail": str(exc)})
+
+
+# Errores de base de datos no previstos (FK rota, dato fuera de rango,
+# sesión caída). Sin este handler el 500 lo genera el middleware de
+# ServerError, que está POR FUERA de CORS: el navegador no ve las cabeceras
+# Access-Control-Allow-Origin y reporta el fallo como "no se pudo conectar
+# con el servidor", ocultando el problema real. Acá se responde 500 JSON
+# desde dentro de CORS, con el detalle en el log del servidor.
+@app.exception_handler(SQLAlchemyError)
+async def sqlalchemy_error_handler(request, exc: SQLAlchemyError):
+    logger.exception("Error de base de datos en %s %s", request.method, request.url.path)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Error interno al consultar la base de datos. Revisá el log del servidor."},
+    )
 
 
 # Login: abierto, sin JWT (es donde se obtiene el JWT)

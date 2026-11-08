@@ -5,7 +5,8 @@ import { initials } from "../../lib/format.js";
 export default function Topbar({
   search,
   onSearchChange,
-  pendingCount = 0,
+  pendingCount = null, // null = desconocido (cargando o con error)
+  pendingError = false,
   username,
   onLogout,
   onOpenMobileNav,
@@ -75,11 +76,15 @@ export default function Topbar({
           {bellOpen && (
             <div className="absolute right-0 mt-2 w-56 rounded-xl bg-card border border-primary/[0.16] shadow-[0_20px_40px_-15px_rgba(0,0,0,0.7)] p-3 animate-bf-pop">
               <p className="text-xs text-[#F2EDE3]">
-                {pendingCount > 0
-                  ? `Tenés ${pendingCount} turno${pendingCount === 1 ? "" : "s"} pendiente${
-                      pendingCount === 1 ? "" : "s"
-                    } hoy.`
-                  : "No hay turnos pendientes por confirmar hoy."}
+                {pendingError
+                  ? "No se pudieron cargar los turnos pendientes. Volvé a cambiar de sección para reintentar."
+                  : pendingCount > 0
+                    ? `Tenés ${pendingCount} turno${pendingCount === 1 ? "" : "s"} pendiente${
+                        pendingCount === 1 ? "" : "s"
+                      } hoy.`
+                    : pendingCount === null
+                      ? "Cargando los turnos pendientes…"
+                      : "No hay turnos pendientes por confirmar hoy."}
               </p>
             </div>
           )}

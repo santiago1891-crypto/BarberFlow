@@ -10,8 +10,8 @@ router = APIRouter(prefix="/barberos", tags=["Barberos"])
 
 @router.get("/", response_model=list[BarberoRead])
 async def listar_barberos(
-    skip: int = 0,
-    limit: int = 100,
+    skip: int = Query(0, ge=0, description="Registros a saltear"),
+    limit: int = Query(100, ge=1, le=1000, description="Máximo de registros a devolver"),
     activo: bool | None = Query(None, description="Filtrar por barberos activos/inactivos"),
     db: AsyncSession = Depends(get_db),
 ):

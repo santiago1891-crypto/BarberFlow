@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Plus, Pencil, Trash2, Power, Phone, Mail as MailIcon } from "lucide-react";
-import { barberosApi } from "../../../lib/resources.js";
+import { barberosApi, fetchAllPages } from "../../../lib/resources.js";
 import { formatMoney, initials } from "../../../lib/format.js";
 import { fullName } from "../../../lib/barberStatus.js";
 import { toast } from "../../../lib/toast.js";
@@ -8,7 +8,7 @@ import Badge from "../../ui/Badge.jsx";
 import Modal from "../../ui/Modal.jsx";
 import ConfirmDialog from "../../ui/ConfirmDialog.jsx";
 import { Field, TextInput } from "../../ui/Field.jsx";
-import { LoadingBlock, EmptyBlock } from "../../ui/StateBlocks.jsx";
+import { LoadingBlock, EmptyBlock, ErrorBlock } from "../../ui/StateBlocks.jsx";
 
 const EMPTY_FORM = {
   nombre: "",
@@ -23,7 +23,12 @@ const EMPTY_FORM = {
 export default function Personal({ search }) {
   const [barberos, setBarberos] = useState([]);
   const [loading, setLoading] = useState(true);
+  // Si la carga falla, se muestra ErrorBlock: sin esto un error de red
+  // quedaba pintado como "no se encontraron barberos".
+  const [error, setError] = useState("");
   const [filtro, setFiltro] = useState("todos"); // todos | activos | inactivos
+  // Id del barbero que se está activando/desactivando (evita doble PATCH)
+  const [togglingId, setTogglingId] = useState(null);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -36,11 +41,14 @@ export default function Personal({ search }) {
 
   async function load() {
     setLoading(true);
+    setError("");
     try {
-      const data = await barberosApi.list({ limit: 200 });
+      // Paginado completo: con limit fijo, a partir de ~200 barberos la
+      // lista quedaba truncada sin aviso.
+      const data = await fetchAllPages(barberosApi.list);
       setBarberos(data);
     } catch (err) {
-      toast.error(err.message || "No se pudieron cargar los barberos.");
+      setError(err.message || "No se pudieron cargar los barberos.");
     } finally {
       setLoading(false);
     }
@@ -122,12 +130,16 @@ export default function Personal({ search }) {
   }
 
   async function toggleActivo(b) {
+    if (togglingId) return;
+    setTogglingId(b.id);
     try {
       await barberosApi.update(b.id, { activo: !b.activo });
       toast.success(b.activo ? "Barbero desactivado." : "Barbero reactivado.");
       load();
     } catch (err) {
       toast.error(err.message || "No se pudo actualizar el estado.");
+    } finally {
+      setTogglingId(null);
     }
   }
 
@@ -140,7 +152,7 @@ export default function Personal({ search }) {
       setConfirmTarget(null);
       load();
     } catch (err) {
-      toast.error(err.message || "No se pudo eliminar (puede tener turnos o servicios asociados).");
+      toast.error(err.message || "No se pudo eliminar el barbero (puede tener turnos o servicios asociados).");
     } finally {
       setConfirmLoading(false);
     }
@@ -179,6 +191,8 @@ export default function Personal({ search }) {
       <div className="rounded-2xl bg-card border border-primary/[0.12] p-5">
         {loading ? (
           <LoadingBlock label="Cargando personal…" />
+        ) : error ? (
+          <ErrorBlock label={error} onRetry={load} />
         ) : filtered.length === 0 ? (
           <EmptyBlock label="No se encontraron barberos con ese filtro." />
         ) : (
@@ -231,8 +245,9 @@ export default function Personal({ search }) {
                       <div className="flex items-center justify-end gap-1.5">
                         <button
                           onClick={() => toggleActivo(b)}
+                          disabled={togglingId === b.id}
                           title={b.activo ? "Desactivar" : "Reactivar"}
-                          className="p-1.5 rounded-lg text-[#6b6459] hover:text-warning hover:bg-warning-soft transition-colors"
+                          className="p-1.5 rounded-lg text-[#6b6459] hover:text-warning hover:bg-warning-soft transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                         >
                           <Power size={14} />
                         </button>

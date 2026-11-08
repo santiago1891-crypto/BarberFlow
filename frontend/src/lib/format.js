@@ -41,15 +41,6 @@ export function formatDateTime(value) {
   return `${formatDate(value)} ${formatTime(value)}`;
 }
 
-/** ISO string -> valor para <input type="datetime-local"> (hora local). */
-export function toDatetimeLocalValue(value) {
-  const d = value ? new Date(value) : new Date();
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(
-    d.getMinutes()
-  )}`;
-}
-
 /** ISO string -> valor para <input type="date"> (hora local). */
 export function toDateInputValue(value) {
   const d = value ? new Date(value) : new Date();
@@ -70,40 +61,6 @@ export function combineDateAndTime(dateStr, timeStr) {
   return new Date(`${dateStr}T${timeStr}:00`).toISOString();
 }
 
-/** Valor de <input type="datetime-local"> -> ISO string para mandar a la API. */
-export function fromDatetimeLocalValue(value) {
-  if (!value) return null;
-  return new Date(value).toISOString();
-}
-
-/** Inicio y fin (ISO) del día de hoy, en horario local. */
-export function todayRangeISO() {
-  const now = new Date();
-  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
-  const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
-  return { desde: start.toISOString(), hasta: end.toISOString() };
-}
-
 export function initials(nombre = "", apellido = "") {
   return `${nombre.charAt(0)}${apellido.charAt(0)}`.toUpperCase() || "?";
-}
-
-export const METODO_PAGO_LABEL = {
-  efectivo: "Efectivo",
-  tarjeta_debito: "Tarjeta de débito",
-  tarjeta_credito: "Tarjeta de crédito",
-  transferencia: "Transferencia",
-  mercado_pago: "Mercado Pago",
-};
-
-/** true si la fecha (ISO) cae dentro del día de hoy, en horario local. */
-export function isToday(value) {
-  if (!value) return false;
-  const d = new Date(value);
-  const now = new Date();
-  return (
-    d.getFullYear() === now.getFullYear() &&
-    d.getMonth() === now.getMonth() &&
-    d.getDate() === now.getDate()
-  );
 }
