@@ -2,7 +2,9 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from app.schemas._timezones import a_aware
 
 
 class ServicioRealizadoBase(BaseModel):
@@ -13,6 +15,13 @@ class ServicioRealizadoBase(BaseModel):
     precio_cobrado: Decimal = Field(..., ge=0)
     comision_pct: Decimal = Field(..., ge=0, le=100)
     notas: str | None = None
+
+    @field_validator("fecha_hora", mode="before")
+    @classmethod
+    def _fecha_con_timezone(cls, v):
+        # Naive -> zona horaria de la barbería; evita el 500 al comparar
+        # con las fechas (aware) que ya están en la base.
+        return a_aware(v)
 
 
 class ServicioRealizadoCreate(ServicioRealizadoBase):

@@ -1,0 +1,117 @@
+# BarberFlow — Compose de PRODUCCIÓN (una instancia por comercio).
+#
+# Uso:
+#   cp .env.example .env      # completar secretos (ver DEPLOY.md)
+#   docker compose -f compose.prod.yaml --env-file .env up -d --build
+#
+# Diferencias con compose.yaml (desarrollo):
+#   - sin bind mounts del código ni --reload
+#   - DEBUG=False (no loguea cada query SQL)
+#   - la base de datos NO publica puertos
+#   - los servicios quedan atrás de Caddy (único con puertos abiertos)
+#   - healthchecks en backend, db y frontend
+#   - logs acotados para no llenar el disco del VPS
+#
+# Variables (todas van en el .env, ver .env.example y DEPLOY.md):
+#   APP_SITE         https://tudominio.com (prod) | http://localhost (test)
+#   VITE_API_URL     <APP_SITE>/api
+#   CORS_ORIGINS     opcional: con /api es mismo origen, no hace falta
+#   CADDY_HTTP_PORT  puerto publicado (80 en prod, 8090 en test local)
+#   CADDY_TLS_PORT   puerto publicado (443 en prod)
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?Definí POSTGRES_PASSWORD en .env}"
+      POSTGRES_DB: barberia
+      TZ: "${TIMEZONE:-America/Argentina/Buenos_Aires}"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    logging: *default-logging
+    # Sin "ports": la base no se expone a internet, solo la ve el backend.
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: "postgresql+asyncpg://postgres:${POSTGRES_PASSWORD}@db:5432/barberia"
+      APP_ENV: "${APP_ENV:-production}"
+      DEBUG: "${DEBUG:-False}"
+      ADMIN_USERNAME: "${ADMIN_USERNAME:-admin}"
+      ADMIN_PASSWORD_HASH: "${ADMIN_PASSWORD_HASH:?Generá el hash con generar_hash_admin.py}"
+      SECRET_KEY: "${SECRET_KEY:?Definí SECRET_KEY en .env}"
+      CORS_ORIGINS: "${CORS_ORIGINS:-}"
+      TIMEZONE: "${TIMEZONE:-America/Argentina/Buenos_Aires}"
+      ACCESS_TOKEN_EXPIRE_MINUTES: "${ACCESS_TOKEN_EXPIRE_MINUTES:-120}"
+      SKIP_AUTO_MIGRATE: "${SKIP_AUTO_MIGRATE:-false}"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=4)",
+        ]
+      interval: 30s
+      timeout: 8s
+      retries: 3
+      start_period: 25s
+    logging: *default-logging
+    # Sin "ports": solo lo alcanza Caddy (red interna del compose).
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+      args:
+        # Incrustada en el JS en tiempo de BUILD: tiene que ser la URL
+        # pública exacta del backend (ver Caddyfile, /api).
+        VITE_API_URL: "${VITE_API_URL:?Definí VITE_API_URL (ej: https://tudominio.com/api)}"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging: *default-logging
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      # Sin esto Caddy cae al default del Caddyfile (https://ejemplo.com) e
+      # intenta obtener un certificado para un dominio que no existe.
+      APP_SITE: "${APP_SITE:?Definí APP_SITE en .env (https://tudominio.com o http://localhost)}"
+    ports:
+      - "${CADDY_HTTP_PORT:-80}:80"
+      - "${CADDY_TLS_PORT:-443}:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - frontend
+      - backend
+    logging: *default-logging
+
+volumes:
+  db_data:
+  caddy_data:
+  caddy_config:

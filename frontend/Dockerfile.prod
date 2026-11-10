@@ -4,17 +4,19 @@
 # (VITE_API_URL) queda incrustada en el build en tiempo de BUILD, no de
 # arranque del contenedor — pasala como build-arg:
 #
-#   docker build -f Dockerfile.prod --build-arg VITE_API_URL=https://api.tudominio.com -t barberflow-frontend .
+#   docker build -f Dockerfile.prod --build-arg VITE_API_URL=https://tudominio.com/api -t barberflow-frontend .
 #
 FROM node:20-alpine AS build
 WORKDIR /app
 
 COPY package.json package-lock.json* ./
-RUN npm install
+# npm ci: instala EXACTAMENTE el lockfile (reproducible). npm install puede
+# actualizar dependencias y romper el build de producción de la nada.
+RUN npm ci
 
 COPY . .
 
-ARG VITE_API_URL=http://localhost:8000
+ARG VITE_API_URL=http://localhost:8000/api
 ENV VITE_API_URL=${VITE_API_URL}
 
 RUN npm run build

@@ -7,3 +7,6 @@ __pycache__/
 *.py[cod]
 node_modules/
 dist/
+
+# Dumps de base de datos (scripts/backup.sh): nunca al repo.
+backups/

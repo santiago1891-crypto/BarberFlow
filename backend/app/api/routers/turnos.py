@@ -8,6 +8,7 @@ from app import crud
 from app.api.deps import get_db
 from app.crud.base import ReglaDeNegocioError
 from app.models.enums import EstadoTurno
+from app.schemas._timezones import a_aware
 from app.schemas.servicio_realizado import ServicioRealizadoRead
 from app.schemas.turno import TurnoCompletar, TurnoCreate, TurnoRead, TurnoUpdate
 
@@ -24,14 +25,17 @@ async def listar_turnos(
     fecha_hasta: datetime | None = Query(None, description="Turnos hasta esta fecha/hora (inclusive)"),
     db: AsyncSession = Depends(get_db),
 ):
+    # Una fecha naive en el query string chocaba al compararla con las
+    # columnas timestamptz (aware) -> 500. Se interpreta en la zona de la
+    # barbería, igual que en los bodies.
     return await crud.turno.get_multi_filtered(
         db,
         skip=skip,
         limit=limit,
         barbero_id=barbero_id,
         estado=estado,
-        fecha_desde=fecha_desde,
-        fecha_hasta=fecha_hasta,
+        fecha_desde=a_aware(fecha_desde),
+        fecha_hasta=a_aware(fecha_hasta),
     )
 
 

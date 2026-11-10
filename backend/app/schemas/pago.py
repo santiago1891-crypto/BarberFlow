@@ -2,9 +2,10 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.enums import EstadoPago, MetodoPago
+from app.schemas._timezones import a_aware
 
 
 class PagoBase(BaseModel):
@@ -13,6 +14,13 @@ class PagoBase(BaseModel):
     monto: Decimal = Field(..., gt=0)
     referencia_externa: str | None = Field(None, max_length=100)
     fecha_pago: datetime | None = None
+
+    @field_validator("fecha_pago", mode="before")
+    @classmethod
+    def _fecha_con_timezone(cls, v):
+        # Naive -> zona horaria de la barbería (evita el 500 por comparar
+        # fechas naive con aware en la transición de estado).
+        return a_aware(v)
 
 
 class PagoCreate(PagoBase):
@@ -32,6 +40,11 @@ class PagoUpdate(BaseModel):
     estado: EstadoPago | None = None
     referencia_externa: str | None = Field(None, max_length=100)
     fecha_pago: datetime | None = None
+
+    @field_validator("fecha_pago", mode="before")
+    @classmethod
+    def _fecha_con_timezone(cls, v):
+        return a_aware(v)
 
 
 class PagoRead(PagoBase):

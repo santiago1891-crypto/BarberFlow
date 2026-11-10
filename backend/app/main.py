@@ -3,12 +3,14 @@ import logging
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.api.deps import get_current_admin
 from app.api.routers import auth, barberos, cierres_caja, pagos, reportes, servicios_realizados, tipos_servicio, turnos
 from app.core.config import settings
 from app.crud.base import ReglaDeNegocioError
+from app.db.session import engine
 
 logger = logging.getLogger("barberflow")
 
@@ -72,3 +74,17 @@ app.include_router(cierres_caja.router, dependencies=protegido)
 @app.get("/", tags=["Health"])
 async def root():
     return {"status": "ok", "env": settings.app_env}
+
+
+# Healthcheck para el orquestador y el monitor de uptime. No requiere auth.
+# 200 = todo bien; 503 = la base no responde (para que el monitor avise
+# apenas, y no recién cuando el dueño de la barbería se queje).
+@app.get("/health", tags=["Health"])
+async def health():
+    try:
+        async with engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+    except Exception:
+        logger.exception("Healthcheck: no se pudo consultar la base de datos")
+        return JSONResponse(status_code=503, content={"status": "error", "db": "down"})
+    return {"status": "ok", "db": "ok", "env": settings.app_env, "version": app.version}

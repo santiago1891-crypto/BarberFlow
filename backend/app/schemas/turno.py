@@ -2,9 +2,10 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.enums import EstadoTurno
+from app.schemas._timezones import a_aware
 
 
 class TurnoBase(BaseModel):
@@ -14,6 +15,14 @@ class TurnoBase(BaseModel):
     cliente_nombre: str | None = Field(None, max_length=150)
     cliente_telefono: str | None = Field(None, max_length=20)
     notas: str | None = None
+
+    @field_validator("fecha_hora", mode="before")
+    @classmethod
+    def _fecha_con_timezone(cls, v):
+        # Sin esto, una fecha naive del cliente chocaba al compararla con
+        # las de la base (aware) -> 500 "can't compare offset-naive and
+        # offset-aware datetimes".
+        return a_aware(v)
 
 
 class TurnoCreate(TurnoBase):
@@ -37,6 +46,11 @@ class TurnoUpdate(BaseModel):
     cliente_nombre: str | None = Field(None, max_length=150)
     cliente_telefono: str | None = Field(None, max_length=20)
     notas: str | None = None
+
+    @field_validator("fecha_hora", mode="before")
+    @classmethod
+    def _fecha_con_timezone(cls, v):
+        return a_aware(v)
 
 
 class TurnoRead(TurnoBase):

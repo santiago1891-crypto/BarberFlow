@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import crud
 from app.api.deps import get_db
+from app.schemas._timezones import a_aware
 from app.schemas.servicio_realizado import (
     ServicioRealizadoCreate,
     ServicioRealizadoRead,
@@ -31,8 +32,10 @@ async def listar_servicios_realizados(
         limit=limit,
         barbero_id=barbero_id,
         tipo_servicio_id=tipo_servicio_id,
-        fecha_desde=fecha_desde,
-        fecha_hasta=fecha_hasta,
+        # Naive -> zona de la barbería (evita el 500 al comparar con las
+        # columnas timestamptz, que siempre son aware).
+        fecha_desde=a_aware(fecha_desde),
+        fecha_hasta=a_aware(fecha_hasta),
     )
 
 

@@ -1,0 +1,8 @@
+# Sin esto, `COPY . .` metía node_modules/ y dist/ dentro de la imagen de
+# producción: build lento, pesado y con archivos de la arquación equivocada.
+node_modules
+dist
+.env
+.env.*
+!.env.example
+npm-debug.log*
